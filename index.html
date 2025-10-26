@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>AI Termin-Detektiv Interaktiv V6.0 (Delete & Fix)</title>
+  <title>AI Termin-Detektiv Interaktiv V8.0 (Final Fix)</title>
 
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
@@ -57,9 +57,8 @@
     .google-button { background:#4285F4; color:#fff; }
     .google-button:hover { background:#3B7AEB; }
     
-    /* Style für den neuen Delete Button */
     .delete-button { 
-        background-color: #F87171; /* Rot */
+        background-color: #F87171; 
         border-color: #EF4444; 
     }
     .delete-button:hover { 
@@ -148,17 +147,15 @@
           renderChatHistory(); 
         } 
       }catch(e){ 
-        console.error(e); 
+        console.error("Fehler beim Laden der History", e); 
       } 
     }
 
-    // **NEUE FUNKTION**
     function clearChatHistory(){
       if(confirm("Sind Sie sicher, dass Sie den Chatverlauf löschen möchten?")){
         localStorage.removeItem(STORAGE_KEY);
         chatHistory = [];
-        renderChatHistory(); // Leert das Fenster
-        // Begrüßungsnachricht erneut senden
+        renderChatHistory(); 
         const welcome = "Willkommen beim **AI Termin-Detektiv**! Das heutige Datum ist der **" + new Date().toLocaleDateString('de-DE') + "**. Senden Sie Text, einen Screenshot oder ein Foto; fehlende Details werden interaktiv abgefragt. Sie können jederzeit tippen oder die Vorschläge wählen.";
         addMessageToChat(welcome, 'model');
       }
@@ -174,9 +171,9 @@
     }
 
     // --- Kalender Hilfsfunktionen ---
-    function durationToMinutes(d){ if(!d || d.includes('-')) return 60; const p=d.split(':'); return p.length===2 ? (+p[0])*60+(+p[1]) : 60; }
+    function durationToMinutes(d){ if(!d || d.includes('-') || d.includes('[FEHLT]')) return 60; const p=d.split(':'); return p.length===2 ? (+p[0])*60+(+p[1]) : 60; }
     function calculateEndTime(date,time,dur){
-      if(!time || time.includes('-')) return date.replace(/-/g,'')+'T235959';
+      if(!time || time.includes('-') || time.includes('[FEHLT]')) return date.replace(/-/g,'')+'T235959';
       const start=new Date(date+'T'+time+':00'); const end=new Date(start.getTime()+dur*60000);
       const y=end.getFullYear(), m=String(end.getMonth()+1).padStart(2,'0'), d_=String(end.getDate()).padStart(2,'0');
       const hh=String(end.getHours()).padStart(2,'0'), mm=String(end.getMinutes()).padStart(2,'0');
@@ -187,7 +184,7 @@
       const location=encodeURIComponent(data.Ort||'');
       const datePart=(data.Datum||'').replace(/-/g,''); const dur=durationToMinutes(data.Dauer||'-');
       let startDate,endDate;
-      if(!data.Uhrzeit || data.Uhrzeit.includes('-')){ startDate=datePart; const s=new Date(data.Datum); const e=new Date(s); e.setDate(s.getDate()+1); endDate=e.toISOString().split('T')[0].replace(/-/g,''); }
+      if(!data.Uhrzeit || data.Uhrzeit.includes('-') || data.Uhrzeit.includes('[FEHLT]')){ startDate=datePart; const s=new Date(data.Datum); const e=new Date(s); e.setDate(s.getDate()+1); endDate=e.toISOString().split('T')[0].replace(/-/g,''); }
       else { const st=data.Uhrzeit.replace(/:/g,'')+'00'; startDate=datePart+'T'+st; endDate=calculateEndTime(data.Datum,data.Uhrzeit,dur); }
       return `https://www.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${startDate}/${endDate}&location=${location}&sf=true&output=xml`;
     }
@@ -195,7 +192,7 @@
       const uid=Date.now(); const now=new Date().toISOString().replace(/[-:]/g,'').split('.')[0]+'Z';
       const summary=data.Zweck||'Termin', location=data.Ort||'', datePart=(data.Datum||'').replace(/-/g,''), dur=durationToMinutes(data.Dauer||'-');
       let dtstart, dtend;
-      if(!data.Uhrzeit || data.Uhrzeit.includes('-')){
+      if(!data.Uhrzeit || data.Uhrzeit.includes('-') || data.Uhrzeit.includes('[FEHLT]')){
         dtstart=`DTSTART;VALUE=DATE:${datePart}`;
         const s=new Date(data.Datum+'T00:00:00'); const e=new Date(s); e.setDate(s.getDate()+1);
         dtend=`DTEND;VALUE=DATE:${e.toISOString().split('T')[0].replace(/-/g,'')}`;
@@ -214,7 +211,6 @@
       if(!sendButton||!userInput) return;
       const text=userInput.value.trim(); const hasImage=currentImageFile!==null; const hasInput=Boolean(text)||hasImage; 
       
-      // Textfeld ist IMMER aktiv
       sendButton.disabled=!hasInput; 
       userInput.disabled=false; 
       
@@ -237,7 +233,6 @@
         const extraction=m[1].trim(); 
         const rawJson=m[2].trim();
         
-        // Entferne den gesamten Block aus dem Text vor der Formatierung
         const pre=t.substring(0,m.index).trim().replace(/\n/g,'<br>'); 
         const post=t.substring(m.index+m[0].length).trim().replace(/\n/g,'<br>');
         
@@ -247,11 +242,11 @@
         
         const block=document.createElement('div'); block.className='extraction-block';
         
-        // Zeigt nur die formatierten Werte an. WICHTIG: Ersetzt [FEHLT] durch - für die Anzeige
+        // Ersetzt [FEHLT] durch - für die Anzeige (für den Fall, dass das Modell es im Text hat)
         const content=extraction.replace(/\[FEHLT\]/g,'-').replace(/<br>/g,'\n').split('\n').filter(l=>l.trim().length>0).map(l=>`<div>${l}</div>`).join('');
         block.innerHTML=`<strong>Termin-Details:</strong><br>`+content;
 
-        const ready = data && data.Datum && !data.Datum.includes('-') && data.Dauer && !data.Dauer.includes('-');
+        const ready = data && data.Datum && !data.Datum.includes('[FEHLT]') && data.Dauer && !data.Dauer.includes('[FEHLT]');
         if(ready){
           const actions=document.createElement('div'); actions.className='calendar-actions';
           const g=document.createElement('a'); g.href=createGoogleCalendarLink(data); g.target='_blank'; g.className='calendar-button google-button';
@@ -309,13 +304,12 @@
               const b=document.createElement('button');
               b.type='button'; b.className='interactive-button';
               b.textContent = label;
-              // **FIX:** Der Button-Wert wird korrekt übergeben
+              // Button-Fix: Wert wird korrekt übergeben
               b.onclick = () => handleInteractiveResponse(value); 
               box.appendChild(b);
             });
           }
           
-          // Logik für den "Anderen X eingeben" Button (Manuelle Eingabe)
           let manualButtonText = null;
 
           if(data.interactionType === 'ORT_SELECTION'){
@@ -345,7 +339,6 @@
               textEl.appendChild(box); 
           }
           
-          // Hinweis für Dauer/Reminder-Buttons
           if(data.interactionType === 'DAUER_SELECTION' || data.interactionType === 'REMINDER_SELECTION'){
               const hint = document.createElement('p');
               hint.className = 'text-sm text-gray-500 mt-2';
@@ -366,7 +359,7 @@
     function addMessageToChat(text, sender, imageUrl=null){
       const data={ text, sender, imageUrl };
       chatHistory.push(data);
-      chatWindow.appendChild(createMessageElement(data));
+      if(chatWindow) chatWindow.appendChild(createMessageElement(data)); // Zusätzliche Überprüfung
       saveChatHistory(); 
       scrollToBottom();
       return data;
@@ -384,8 +377,8 @@
     async function sendApiRequest(userMessageText, userImageFile=null){
       const currentDate=new Date().toLocaleDateString('de-DE',{year:'numeric',month:'2-digit',day:'2-digit'});
 
-      // **AKTUALISIERTER SYSTEM PROMPT**
-      const systemPrompt=`Sie sind der 'AI Termin-Detektiv'. Das **HEUTIGE DATUM ist: [HEUTIGES DATUM]**. Extrahieren und pflegen Sie Datum (YYYY-MM-DD), Uhrzeit (HH:MM), Dauer (HH:MM), Ort (vollständige Adresse) und Zweck. Behalten Sie den Chatverlauf immer im Kontext. Nutzen Sie Google Search, um Adressen von Ärzten, Geschäften oder Orten zu finden.
+      // **KORRIGIERTER SYSTEM PROMPT** (Alle \n Escapes innerhalb des Template Literals entfernt, um Syntaxfehler zu vermeiden)
+      const systemPrompt=`Sie sind der 'AI Termin-Detektiv'. Das **HEUTIGE DATUM ist: ${currentDate}**. Extrahieren und pflegen Sie Datum (YYYY-MM-DD), Uhrzeit (HH:MM), Dauer (HH:MM), Ort (vollständige Adresse) und Zweck. Behalten Sie den Chatverlauf immer im Kontext. Nutzen Sie Google Search, um Adressen von Ärzten, Geschäften oder Orten zu finden.
 Wenn Daten fehlen oder unklar sind, antworten Sie ausschließlich mit einem <INTERACTION>-Block im JSON-Format.
 
 Spezifische Anweisungen für die interaktive Abfrage:
@@ -413,10 +406,9 @@ Wenn alle Hauptfelder (Datum, Uhrzeit, Dauer, Ort, Zweck) vorliegen, liefern Sie
 **Zweck:** Text (formatierter Text)
 <DATA>{"Datum":"YYYY-MM-DD","Uhrzeit":"HH:MM","Dauer":"HH:MM","Ort":"Adresse","Zweck":"Text"}</DATA>
 </EXTRACT>
-Im JSON in <DATA> fehlende Felder als **"[FEHLT]"** kennzeichnen. Antworten Sie auf Deutsch. Verwenden Sie im Format-Block descriptive/friendly text (z.B. "Dienstag, der 28.10.2025 (Nächsten Dienstag)") und nicht nur die rohen ISO-Werte.
+**WICHTIG:** Im JSON in <DATA> fehlende Felder als **"[FEHLT]"** kennzeichnen. **In der formatierten Textausgabe** innerhalb von <EXTRACT> fehlende Felder mit **einem einfachen Bindestrich** ("-") kennzeichnen. Antworten Sie auf Deutsch. Verwenden Sie im Format-Block descriptive/friendly text (z.B. "Dienstag, der 28.10.2025 (Nächsten Dienstag)") und nicht nur die rohen ISO-Werte.`;
 
 
-      // History wird an die API gesendet
       const historyForApi = chatHistory.map(m=>({ role:m.sender==='user'?'user':'model', parts:[{ text:m.text }] }));
       
       let parts=[{ text:userMessageText }];
@@ -511,12 +503,17 @@ Im JSON in <DATA> fehlende Felder als **"[FEHLT]"** kennzeichnen. Antworten Sie 
       userInput = document.getElementById('userInput');
       sendButton = document.getElementById('sendButton');
       downloadChatButton = document.getElementById('downloadChatButton');
-      clearChatButton = document.getElementById('clearChatButton'); // Neuer Button
+      clearChatButton = document.getElementById('clearChatButton'); 
       fileInput = document.getElementById('fileInput');
       imagePreviewContainer = document.getElementById('imagePreviewContainer');
       loadingIndicator = document.getElementById('loadingIndicator');
 
-      if(!chatWindow || !userInput || !sendButton){ console.error('FEHLER: Kritische DOM-Elemente fehlen!'); return; }
+      if(!chatWindow || !userInput || !sendButton){ 
+          console.error('FEHLER: Kritische DOM-Elemente fehlen!'); 
+          // Zeige eine Fehlermeldung an, falls die App nicht initialisiert werden kann
+          document.body.innerHTML = '<div style="padding: 20px; color: red;">Fehler beim Laden der Chat-Oberfläche. Bitte prüfen Sie die Konsolenausgabe.</div>';
+          return; 
+      }
 
       currentInteraction = null;
       currentImageFile = null;
@@ -562,7 +559,6 @@ Im JSON in <DATA> fehlende Felder als **"[FEHLT]"** kennzeichnen. Antworten Sie 
 
       sendButton.addEventListener('click', sendMessage);
       
-      // Event Listener für den neuen Clear Button
       if (clearChatButton) {
         clearChatButton.addEventListener('click', clearChatHistory);
       }
@@ -585,5 +581,3 @@ Im JSON in <DATA> fehlende Felder als **"[FEHLT]"** kennzeichnen. Antworten Sie 
   </script>
 </body>
 </html>
-
-
