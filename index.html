@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>AI Termin-Detektiv Interaktiv V8.0 (Final Fix)</title>
+  <title>AI Termin-Detektiv Interaktiv V9.0 (Final Fix)</title>
 
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
@@ -33,20 +33,29 @@
     .loading-dots div:nth-child(3){ animation-delay:0.4s; }
     @keyframes bounce { from{ transform:translateY(0);} to{ transform:translateY(-5px);} }
 
+    /* WIEDERHERGESTELLTE FLEXIBLE BUTTONS */
     .interactive-buttons { display:flex; flex-wrap:wrap; gap:8px; margin-top:1rem; padding-top:0.5rem; } 
     .interactive-button {
       display:flex; align-items:center; justify-content:center; gap:8px; 
       background:#10B981; color:#fff; padding:10px 14px; border-radius:0.75rem; font-size:0.9rem; font-weight:600;
       cursor:pointer; transition:background-color .2s, transform .05s; box-shadow:0 1px 3px rgba(0,0,0,0.15);
-      flex-basis: calc(33.333% - 8px); 
+      flex-basis: calc(33.333% - 8px); /* Für Dauer/Erinnerung: 3 Buttons pro Zeile */
       min-width: 120px;
     }
     .interactive-button.manual-input {
       background:#6B7280; 
-      flex-basis: 100%; 
+      flex-basis: 100%; /* Manueller Button volle Breite */
     }
     .interactive-button:hover { background:#059669; }
     .interactive-button:active { transform:scale(0.99); }
+
+    /* Fix für Adress-Optionen (die volle Breite benötigen) */
+    .interactive-buttons.full-width-options .interactive-button {
+        flex-basis: 100%;
+        text-align: left;
+        justify-content: flex-start;
+    }
+
 
     .calendar-actions { display:flex; flex-direction:column; gap:8px; margin-top:1rem; padding-top:1rem; border-top:1px dashed #D1D5DB; }
     .calendar-button { display:flex; align-items:center; justify-content:center; gap:8px; padding:12px; border-radius:0.75rem; font-weight:600; transition:background-color .2s, transform .05s; width:100%; }
@@ -56,7 +65,7 @@
     .ics-button:hover { background:#DC2626; }
     .google-button { background:#4285F4; color:#fff; }
     .google-button:hover { background:#3B7AEB; }
-    
+
     .delete-button { 
         background-color: #F87171; 
         border-color: #EF4444; 
@@ -212,6 +221,7 @@
       const text=userInput.value.trim(); const hasImage=currentImageFile!==null; const hasInput=Boolean(text)||hasImage; 
       
       sendButton.disabled=!hasInput; 
+      // Input ist immer aktiv, aber der Placeholder ändert sich bei Interaktion
       userInput.disabled=false; 
       
       userInput.placeholder=currentInteraction?'Bitte geben Sie hier Ihre Korrektur/Antwort ein oder wählen Sie oben eine Option...':'Termin-Details eingeben...';
@@ -242,7 +252,7 @@
         
         const block=document.createElement('div'); block.className='extraction-block';
         
-        // Ersetzt [FEHLT] durch - für die Anzeige (für den Fall, dass das Modell es im Text hat)
+        // **WICHTIG:** Ersetzt [FEHLT] durch - für die Anzeige (Falls das Modell die Anweisung ignoriert und [FEHLT] im Extraction Block ausgibt)
         const content=extraction.replace(/\[FEHLT\]/g,'-').replace(/<br>/g,'\n').split('\n').filter(l=>l.trim().length>0).map(l=>`<div>${l}</div>`).join('');
         block.innerHTML=`<strong>Termin-Details:</strong><br>`+content;
 
@@ -294,22 +304,29 @@
           
           textEl.innerHTML = formatMarkdownToHtml(prompt) + '<br>';
 
-          const box=document.createElement('div'); box.className='interactive-buttons';
+          const box=document.createElement('div'); 
+          box.className='interactive-buttons';
+
+          // Zusätzliche Klasse für die Adress-Optionen, damit sie volle Breite bekommen
+          if(data.interactionType === 'ORT_SELECTION' || data.interactionType === 'ZWECK_SELECTION'){
+              box.classList.add('full-width-options');
+          }
           
           if(Array.isArray(data.options)){
             data.options.forEach(opt=>{
+              // Button-Fix: Verwende Label ODER Value, um undefined zu vermeiden
               const label = opt && (opt.label || opt.value) ? (opt.label || String(opt.value)) : 'Option wählen';
               const value = opt && (opt.value ?? opt.label) ? (opt.value ?? opt.label) : label;
 
               const b=document.createElement('button');
               b.type='button'; b.className='interactive-button';
               b.textContent = label;
-              // Button-Fix: Wert wird korrekt übergeben
               b.onclick = () => handleInteractiveResponse(value); 
               box.appendChild(b);
             });
           }
           
+          // WIEDERHERGESTELLTE MANUELLE EINGABE-BUTTONS
           let manualButtonText = null;
 
           if(data.interactionType === 'ORT_SELECTION'){
@@ -328,6 +345,7 @@
               manualInputButton.className = 'interactive-button manual-input'; 
               manualInputButton.textContent = manualButtonText;
               manualInputButton.onclick = () => { 
+                  // Umstellung auf Standard-Eingabefeld
                   currentInteraction = null;
                   userInput.focus();
                   toggleSendButton();
@@ -337,13 +355,6 @@
 
           if (box.children.length > 0) {
               textEl.appendChild(box); 
-          }
-          
-          if(data.interactionType === 'DAUER_SELECTION' || data.interactionType === 'REMINDER_SELECTION'){
-              const hint = document.createElement('p');
-              hint.className = 'text-sm text-gray-500 mt-2';
-              hint.innerHTML = 'Falls eine andere Zeitangabe benötigt wird, bitte unten im Textfeld eingeben.';
-              textEl.appendChild(hint);
           }
           
           raw = raw.replace(iRx,'').trim();
@@ -359,7 +370,7 @@
     function addMessageToChat(text, sender, imageUrl=null){
       const data={ text, sender, imageUrl };
       chatHistory.push(data);
-      if(chatWindow) chatWindow.appendChild(createMessageElement(data)); // Zusätzliche Überprüfung
+      if(chatWindow) chatWindow.appendChild(createMessageElement(data)); 
       saveChatHistory(); 
       scrollToBottom();
       return data;
@@ -377,7 +388,7 @@
     async function sendApiRequest(userMessageText, userImageFile=null){
       const currentDate=new Date().toLocaleDateString('de-DE',{year:'numeric',month:'2-digit',day:'2-digit'});
 
-      // **KORRIGIERTER SYSTEM PROMPT** (Alle \n Escapes innerhalb des Template Literals entfernt, um Syntaxfehler zu vermeiden)
+      // **KORRIGIERTER SYSTEM PROMPT** (Exakt V5.0 mit Fix für [FEHLT]/-)
       const systemPrompt=`Sie sind der 'AI Termin-Detektiv'. Das **HEUTIGE DATUM ist: ${currentDate}**. Extrahieren und pflegen Sie Datum (YYYY-MM-DD), Uhrzeit (HH:MM), Dauer (HH:MM), Ort (vollständige Adresse) und Zweck. Behalten Sie den Chatverlauf immer im Kontext. Nutzen Sie Google Search, um Adressen von Ärzten, Geschäften oder Orten zu finden.
 Wenn Daten fehlen oder unklar sind, antworten Sie ausschließlich mit einem <INTERACTION>-Block im JSON-Format.
 
@@ -508,12 +519,7 @@ Wenn alle Hauptfelder (Datum, Uhrzeit, Dauer, Ort, Zweck) vorliegen, liefern Sie
       imagePreviewContainer = document.getElementById('imagePreviewContainer');
       loadingIndicator = document.getElementById('loadingIndicator');
 
-      if(!chatWindow || !userInput || !sendButton){ 
-          console.error('FEHLER: Kritische DOM-Elemente fehlen!'); 
-          // Zeige eine Fehlermeldung an, falls die App nicht initialisiert werden kann
-          document.body.innerHTML = '<div style="padding: 20px; color: red;">Fehler beim Laden der Chat-Oberfläche. Bitte prüfen Sie die Konsolenausgabe.</div>';
-          return; 
-      }
+      if(!chatWindow || !userInput || !sendButton){ console.error('FEHLER: Kritische DOM-Elemente fehlen!'); return; }
 
       currentInteraction = null;
       currentImageFile = null;
