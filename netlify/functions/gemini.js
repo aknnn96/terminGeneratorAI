@@ -1,6 +1,6 @@
 // netlify/functions/gemini.js
 export default async (req, res) => {
-  // CORS für Browser-Aufrufe
+  // CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -12,14 +12,13 @@ export default async (req, res) => {
       return res.status(500).json({ error: { message: 'GEMINI_API_KEY missing' } });
     }
 
-    // Payload robust einlesen (je nach Runtime kann req.body leer oder bereits geparst sein)
+    // Payload robust einlesen
     let payload;
     if (typeof req.body === 'object' && req.body !== null) {
       payload = req.body;
     } else if (typeof req.body === 'string' && req.body.length) {
       payload = JSON.parse(req.body);
     } else {
-      // Body manuell streamen
       const chunks = [];
       for await (const chunk of req) chunks.push(chunk);
       const raw = Buffer.concat(chunks).toString('utf8');
@@ -28,7 +27,6 @@ export default async (req, res) => {
 
     const API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent";
 
-    // Upstream-Call mit nativem fetch (Node 18+ in Netlify)
     const upstream = await fetch(API_URL, {
       method: 'POST',
       headers: {
@@ -38,10 +36,9 @@ export default async (req, res) => {
       body: JSON.stringify(payload)
     });
 
-    const text = await upstream.text(); // ungeparst zurückgeben, inkl. Fehlermeldungen
+    const text = await upstream.text();
     return res.status(upstream.status).send(text);
   } catch (e) {
-    // 502 als Gateway-Fehler der Function
     return res.status(502).json({ error: { message: e.message } });
   }
 };
