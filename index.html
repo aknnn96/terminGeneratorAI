@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>AI Termin-Detektiv Interaktiv V21 (Buttons fix + Andere)</title>
+  <title>AI Termin-Detektiv Interaktiv V20.1 (Stabilitäts-Fix)</title>
 
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
@@ -33,6 +33,7 @@
     .loading-dots div:nth-child(3){ animation-delay:0.4s; }
     @keyframes bounce { from{ transform:translateY(0);} to{ transform:translateY(-5px);} }
 
+    /* Optionen im flex-wrap */
     .interactive-buttons { display:flex; flex-wrap:wrap; gap:8px; margin-top:1rem; padding-top:0.5rem; }
     .interactive-button {
       display:flex; align-items:center; justify-content:center; gap:8px;
@@ -42,12 +43,20 @@
       min-width: 120px;
       text-align: center;
     }
-    .interactive-buttons.full-width-options .interactive-button { flex-basis:100%; text-align:left; justify-content:flex-start; padding-inline:1rem; }
+    .interactive-buttons.full-width-options .interactive-button {
+      flex-basis: 100%;
+      text-align: left;
+      justify-content: flex-start;
+      padding-left: 1rem;
+      padding-right: 1rem;
+    }
+    .interactive-button.manual-input {
+      background:#F3F4F6; color:#4B5563; border:1px dashed #9CA3AF; box-shadow:none; flex-basis:100%;
+      pointer-events:auto !important;
+    }
     .interactive-button:hover { background:#059669; }
+    .interactive-button.manual-input:hover { background:#E5E7EB; color:#1F2937; }
     .interactive-button:active { transform:scale(0.99); }
-
-    .manual-input { background:#F3F4F6 !important; color:#4B5563 !important; border:1px dashed #9CA3AF; box-shadow:none; }
-    .manual-input:hover { background:#E5E7EB !important; color:#1F2937 !important; }
 
     .calendar-actions { display:flex; flex-direction:column; gap:8px; margin-top:1rem; padding-top:1rem; border-top:1px dashed #D1D5DB; }
     .calendar-button { display:flex; align-items:center; justify-content:center; gap:8px; padding:12px; border-radius:0.75rem; font-weight:600; transition:background-color .2s, transform .05s; width:100%; }
@@ -71,7 +80,7 @@
       </h1>
 
       <button id="clearChatButton"
-        class="flex items-center justify-center gap-2 delete-button text-white font-semibold py-2 px-3 rounded-xl transition duration-150 ease-in-out shadow-lg text-sm">
+        class="flex items-center justify-center gap-2 delete-button hover:bg-red-600 text-white font-semibold py-2 px-3 rounded-xl transition duration-150 ease-in-out shadow-lg text-sm">
         <span class="material-icons align-middle" style="font-size:18px; line-height:1;">delete_forever</span>
         <span>Chat Löschen</span>
       </button>
@@ -134,8 +143,12 @@
     let chatWindow, userInput, sendButton, downloadChatButton, clearChatButton, fileInput, imagePreviewContainer, loadingIndicator;
 
     function saveChatHistory(){ try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(chatHistory)); }catch(e){ console.error(e); } }
-    function loadChatHistory(){ try{ const s=localStorage.getItem(STORAGE_KEY); if(s){ chatHistory=JSON.parse(s); renderChatHistory(); } }catch(e){ console.error("Fehler beim Laden der History", e); } }
-
+    function loadChatHistory(){
+      try{
+        const s=localStorage.getItem(STORAGE_KEY);
+        if(s){ chatHistory=JSON.parse(s); renderChatHistory(); }
+      }catch(e){ console.error("Fehler beim Laden der History", e); }
+    }
     function clearChatHistory(){
       if(confirm("Sind Sie sicher, dass Sie den Chatverlauf löschen möchten?")){
         localStorage.removeItem(STORAGE_KEY);
@@ -145,7 +158,6 @@
         addMessageToChat(welcome, 'model');
       }
     }
-
     function renderChatHistory(){
       if(!chatWindow) return;
       chatWindow.innerHTML='';
@@ -155,7 +167,7 @@
       toggleSendButton();
     }
 
-    // Kalender-Utils
+    // Kalender-Helfer
     function durationToMinutes(d){ if(!d || d.includes('-') || d.includes('[FEHLT]')) return 60; const p=d.split(':'); return p.length===2 ? (+p[0])*60+(+p[1]) : 60; }
     function calculateEndTime(date,time,dur){
       if(!time || time.includes('-') || time.includes('[FEHLT]')) return date.replace(/-/g,'')+'T235959';
@@ -189,7 +201,6 @@
       return ['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//AI Termin-Detektiv//NONSGML v1.0//DE','BEGIN:VEVENT',`UID:${uid}@termin-detektiv.de`,`DTSTAMP:${now}`,dtstart,dtend,`SUMMARY:${summary}`,`LOCATION:${location}`,'END:VEVENT','END:VCALENDAR'].join('\r\n');
     }
     function downloadICS(c){ const blob=new Blob([c],{type:'text/calendar;charset=utf-8'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`termin_${Date.now()}.ics`; document.body.appendChild(a); a.click(); document.body.removeChild(a); }
-
     function scrollToBottom(){ if(!chatWindow) return; setTimeout(()=>{ chatWindow.scrollTop=chatWindow.scrollHeight; },10); }
     function toggleSendButton(){
       if(!sendButton||!userInput) return;
@@ -205,16 +216,16 @@
         const loose = t.match(/\{[\s\S]*"interactionType"[\s\S]*\}/);
         if(loose){ t = t.replace(loose[0], `<INTERACTION>${loose[0]}</INTERACTION>`); }
       }
-      const rx=/<EXTRACT>(.*?)<DATA>(.*?)<\/DATA><\/EXTRACT>/s; const m=t.match(rx);
+      const rx=/<EXTRACT>(.*?)<DATA>(.*?)<\/DATA><\/EXTRACT>/s;
+      const m=t.match(rx);
       if(m){
         const extraction=m[1].trim(); const rawJson=m[2].trim();
         const pre=t.substring(0,m.index).trim().replace(/\n/g,'<br>'); const post=t.substring(m.index+m[0].length).trim().replace(/\n/g,'<br>');
-        let html=pre.replace(/<br>$/,'');
-        let data=null; try{ data=JSON.parse(rawJson); }catch(e){ console.error('DATA parse error', e); }
+        let html=pre.replace(/<br>$/,''); let data=null;
+        try{ data=JSON.parse(rawJson); }catch(e){ console.error('DATA parse error', e); }
         const block=document.createElement('div'); block.className='extraction-block';
         const content=extraction.replace(/\[FEHLT\]/g,'-').replace(/<br>/g,'\n').split('\n').filter(l=>l.trim().length>0).map(l=>`<div>${l}</div>`).join('');
         block.innerHTML=`<strong>Termin-Details:</strong><br>`+content;
-
         const ready = data && data.Datum && !data.Datum.includes('[FEHLT]') && data.Dauer && !data.Dauer.includes('[FEHLT]');
         if(ready){
           const actions=document.createElement('div'); actions.className='calendar-actions';
@@ -240,12 +251,10 @@
       const row=document.createElement('div'); row.className=`message-row ${msg.sender==='user'?'user-message-row':'bot-message-row'}`;
       const cont=document.createElement('div'); cont.className='message-content';
 
-      if(msg.imageUrl){
-        const img=document.createElement('img'); img.src=msg.imageUrl; img.alt='Vom Nutzer hochgeladenes Bild';
-        img.className='w-full max-h-64 object-contain rounded-xl mb-2 shadow-md'; cont.appendChild(img);
-      }
+      if(msg.imageUrl){ const img=document.createElement('img'); img.src=msg.imageUrl; img.alt='Vom Nutzer hochgeladenes Bild'; img.className='w-full max-h-64 object-contain rounded-xl mb-2 shadow-md'; cont.appendChild(img); }
 
-      const textEl=document.createElement('div'); textEl.className=`message ${msg.sender==='user'?'user-message': (msg.sender==='system'?'system-message':'bot-message')}`;
+      const bubbleClass = msg.sender==='system' ? 'system-message' : (msg.sender==='user'?'user-message':'bot-message');
+      const textEl=document.createElement('div'); textEl.className=`message ${bubbleClass}`;
 
       if(msg.sender==='model'){ currentInteraction=null; }
 
@@ -265,40 +274,61 @@
 
           textEl.innerHTML = formatMarkdownToHtml(prompt) + '<br>';
 
-          const box=document.createElement('div'); box.className='interactive-buttons';
-          if(data.interactionType === 'ORT_SELECTION' || data.interactionType === 'ZWECK_SELECTION'){ box.classList.add('full-width-options'); }
+          const box=document.createElement('div');
+          box.className='interactive-buttons';
+          if(data.interactionType === 'ORT_SELECTION' || data.interactionType === 'ZWECK_SELECTION'){
+            box.classList.add('full-width-options');
+          }
 
           if(Array.isArray(data.options)){
             data.options.forEach(opt=>{
-              const label = (opt && opt.label) ? String(opt.label) : (opt && opt.value) ? String(opt.value) : 'Option wählen';
-              const value = (opt && opt.value !== undefined) ? String(opt.value) : label;
+              const label = (opt && opt.label) ? opt.label : (opt && opt.value) ? String(opt.value) : 'Option wählen';
+              const value = (opt && opt.value !== undefined) ? opt.value : (opt && opt.label) ? opt.label : label;
+
               const b=document.createElement('button');
               b.type='button'; b.className='interactive-button';
               b.textContent = label;
-              b.onclick = () => handleInteractiveResponse(value);
+
+              // Stabilitäts-Fix: Wert fixieren und Doppelclick verhindern
+              b.addEventListener('click', async (ev) => {
+                ev.preventDefault();
+                const chosen = String(value);
+                b.disabled = true;
+                const snapshot = currentInteraction; // fixiere aktuellen Kontext
+                currentInteraction = null;          // Interaktion schließen, bevor Request startet
+                addMessageToChat(`(Korrigiert/Ergänzt: ${chosen})`, 'user');
+                await handleChatFlow(`**Interaktive Korrektur/Ergänzung:** Feld (${snapshot?.interactionType}) = **${chosen}**. Aktualisiere den Termin-Entwurf.`);
+              }, { once: true });
               box.appendChild(b);
             });
           }
 
-          // Immer einen "Andere"-Button anhängen
-          const manualBtn=document.createElement('button');
-          manualBtn.type='button';
-          manualBtn.className='interactive-button manual-input';
-          manualBtn.textContent='Andere (bitte unten eingeben!)';
-          manualBtn.onclick=()=>{
+          // Immer: "Andere (bitte unten eingeben!)"
+          const manualBtn = document.createElement('button');
+          manualBtn.type = 'button';
+          manualBtn.className = 'interactive-button manual-input';
+          manualBtn.textContent = 'Andere (bitte unten eingeben!)';
+          manualBtn.addEventListener('click', (ev) => {
+            ev.preventDefault();
             userInput.focus();
-            userInput.placeholder = "Geben Sie Ihre Alternative ein und drücken Sie 'Senden'.";
-            // currentInteraction NICHT löschen: so kann die Eingabe als Antwort auf dieselbe Interaktion gewertet werden
-          };
+            userInput.placeholder = "Geben Sie hier Ihre manuelle Eingabe ein und drücken Sie 'Senden'.";
+            currentInteraction = null; // damit der normale Send-Flow greift
+            toggleSendButton();
+          }, { once: true });
           box.appendChild(manualBtn);
 
-          textEl.appendChild(box);
+          if(box.children.length > 0){
+            textEl.appendChild(box);
+          }
+
           raw = raw.replace(iRx,'').trim();
         }catch(e){ console.error('Interaction JSON parse error', e); }
       }
 
-      // Entferne eventuelle JSON-Reste aus Modelltext
-      if(msg.sender==='model'){ raw = raw.replace(/\{[\s\S]*\}/g, '').trim(); }
+      if(msg.sender==='model'){
+        raw = raw.replace(/\{[\s\S]*\}/g, '').trim();
+      }
+
       if(raw.length>0){ textEl.innerHTML += formatMarkdownToHtml(raw); }
 
       cont.appendChild(textEl); row.appendChild(cont);
@@ -325,22 +355,27 @@
 
     async function sendApiRequest(userMessageText, userImageFile=null){
       const currentDate=new Date().toLocaleDateString('de-DE',{year:'numeric',month:'2-digit',day:'2-digit'});
-      const systemPrompt=`Sie sind der 'AI Termin-Detektiv' ... (gekürzt – identisch zu V20, behält INTERACTION- und EXTRACT-Vorgaben bei).`;
+
+      const systemPrompt=`Sie sind der 'AI Termin-Detektiv'. Das **HEUTIGE DATUM ist: ${currentDate}**. Extrahieren und pflegen Sie Datum (YYYY-MM-DD), Uhrzeit (HH:MM), Dauer (HH:MM), Ort (vollständige Adresse) und Zweck. Behalten Sie den Chatverlauf im Kontext. Wenn Daten fehlen, liefern Sie genau einen <INTERACTION>-Block mit JSON (mit "interactionType", "message", "options":[{"label":"...","value":"..."}]).`;
 
       const historyForApi = chatHistory.map(m=>({ role:m.sender==='user'?'user':'model', parts:[{ text:m.text }] }));
 
-      // Garantiert mindestens ein Textteil
-      let baseText = userMessageText && userMessageText.trim().length ? userMessageText.trim() : "Bitte Termindaten analysieren und fehlende Felder interaktiv abfragen.";
-      let parts=[{ text: baseText }];
-
+      let parts=[{ text:userMessageText }];
       if(userImageFile){
         try{
           const base64=await fileToBase64(userImageFile);
-          parts.push({ inlineData:{ mimeType:userImageFile.type, data:base64 } });
+          parts=[
+            { text:`Analysiere das angehängte Bild und den Text ("${userMessageText||'Bitte Termindaten aus dem Bild extrahieren.'}") und extrahiere/korrigiere die Termindaten. Beachte den gesamten Chatverlauf.` },
+            { inlineData:{ mimeType:userImageFile.type, data:base64 } }
+          ];
         }catch{ return { text:"Ein Fehler ist beim Hochladen des Bildes aufgetreten.", type:'error' }; }
       }
 
-      const payload = { contents:[...historyForApi, { role:'user', parts }], tools:[{ googleSearch:{} }], systemInstruction:{ parts:[{ text: systemPrompt }] } };
+      const payload = { contents:[...historyForApi, { role:'user', parts }], systemInstruction:{ parts:[{ text: systemPrompt }] } };
+
+      if (!parts || !Array.isArray(parts) || parts.length === 0 || (!userMessageText && !userImageFile)) {
+        return { text: "Bitte geben Sie eine Nachricht ein oder laden Sie ein Bild hoch.", type: "error" };
+      }
 
       const resp = await fetch(API_ENDPOINT, {
         method:'POST',
@@ -392,19 +427,15 @@
     }
 
     async function handleInteractiveResponse(value){
-      // Robuster: Auch wenn currentInteraction schon null ist, trotzdem Nutzernachricht + Folgeprompt senden
+      if(!currentInteraction) return;
       const v = String(value||"").trim();
       if(!v) return;
 
-      const interaction = currentInteraction ? currentInteraction.interactionType : 'INTERACTION';
-      addMessageToChat(`(Auswahl: ${v})`, 'user');
-
-      // Interaktion als abgeschlossen markieren
-      currentInteraction = null;
+      const snapshot = currentInteraction; // fixiere Interaktion
+      currentInteraction = null;          // sofort schließen
+      addMessageToChat(`(Korrigiert/Ergänzt: ${v})`, 'user');
+      await handleChatFlow(`**Interaktive Korrektur/Ergänzung:** Feld (${snapshot.interactionType}) = **${v}**. Aktualisiere den Termin-Entwurf.`);
       toggleSendButton();
-
-      const msg = `**Interaktive Auswahl:** Feld (${interaction}) = **${v}**. Bitte Entwurf aktualisieren.`;
-      await handleChatFlow(msg);
     }
 
     function initializeChat(){
