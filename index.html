@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>AI Termin-Detektiv V23 (Ultra-Strenge Formaterzwingung)</title>
+  <title>AI Termin-Detektiv V24 (Final-Final mit 5 Adressvorschlägen)</title>
 
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
@@ -139,28 +139,17 @@
     }
     function renderChatHistory(){ if(!chatWindow) return; chatWindow.innerHTML=''; currentInteraction=null; chatHistory.forEach(m=> chatWindow.appendChild(createMessageElement(m))); scrollToBottom(); toggleSendButton(); }
 
-    // STRIKTE WERT-NORMALISIERUNG
     function normalizeDurationValue(v){
       const s = String(v||'').toLowerCase().replace(/,/g,'.').replace(/\s+/g,' ').trim();
-      // Bereits HH:MM? → direkt
       if (/^\d{1,2}:\d{2}$/.test(s)) return s;
-      // z.B. "0:30" "1:00" "2:00"
       const exact = s.match(/^(\d{1,2}):(\d{2})$/);
       if(exact) return `${exact[1]}:${exact[2]}`;
-      // "1.5h", "1,5 stunden"
       const hFloat = s.match(/^(\d+(?:\.\d+)?)\s*(?:h|stunde|stunden)$/);
-      if(hFloat){
-        const h = parseFloat(hFloat[1]); const hh = Math.floor(h); const mm = Math.round((h-hh)*60);
-        return `${hh}:${mm.toString().padStart(2,'0')}`;
-      }
-      // "30", "30min", "90 minuten"
+      if(hFloat){ const h = parseFloat(hFloat[1]); const hh = Math.floor(h); const mm = Math.round((h-hh)*60); return `${hh}:${mm.toString().padStart(2,'0')}`; }
       const mInt = s.match(/^(\d+)\s*(?:m|min|minute|minuten)?$/);
-      if(mInt){
-        const m = parseInt(mInt[1],10); const hh = Math.floor(m/60); const mm = m%60;
-        return `${hh}:${mm.toString().padStart(2,'0')}`;
-      }
+      if(mInt){ const m = parseInt(mInt[1],10); const hh = Math.floor(m/60); const mm = m%60; return `${hh}:${mm.toString().padStart(2,'0')}`; }
       console.warn(`[WARN] Dauer-Wert nicht erkannt: "${v}" → Fallback "1:00"`);
-      return "1:00"; // Fallback
+      return "1:00";
     }
     function normalizeReminderValue(v){
       const s = String(v||'').toLowerCase().trim();
@@ -171,27 +160,17 @@
       const m = s.match(/(\d+)\s*(?:min|minute|minuten)/); if(m) return String(parseInt(m[1],10));
       const h = s.match(/(\d+)\s*(?:h|stunde|stunden)/); if(h) return String(parseInt(h[1],10)*60);
       console.warn(`[WARN] Erinnerungs-Wert nicht erkannt: "${v}" → Fallback "60"`);
-      return "60"; // Fallback
+      return "60";
     }
     function normalizeOptions(options, type){
-      if(!Array.isArray(options)){
-        console.error(`[ERROR] options ist kein Array:`, options);
-        return [];
-      }
+      if(!Array.isArray(options)){ console.error(`[ERROR] options ist kein Array:`, options); return []; }
       return options.map((opt,i)=>{
         let label, value;
-        if (opt && typeof opt === 'object'){
-          label = opt.label ?? opt.value ?? `Option ${i+1}`;
-          value = opt.value ?? opt.label ?? label;
-        } else {
-          label = (opt ?? `Option ${i+1}`);
-          value = label;
-        }
+        if (opt && typeof opt === 'object'){ label = opt.label ?? opt.value ?? `Option ${i+1}`; value = opt.value ?? opt.label ?? label; }
+        else { label = (opt ?? `Option ${i+1}`); value = label; }
         label = String(label); value = String(value);
-        
         if (type === 'DAUER_SELECTION') value = normalizeDurationValue(value);
         if (type === 'REMINDER_SELECTION') value = normalizeReminderValue(value);
-        
         console.log(`[DEBUG] Option normalisiert: label="${label}", value="${value}"`);
         return { label, value };
       });
@@ -282,7 +261,6 @@
       let raw = msg.text;
       if(!raw.includes('<INTERACTION>')){ const loose = raw.match(/\{[\s\S]*?"interactionType"[\s\S]*?\}/); if(loose){ raw = raw.replace(loose[0], `<INTERACTION>${loose[0]}</INTERACTION>`); } }
 
-      // NUR ERSTE INTERACTION
       const iRx=/<INTERACTION>(.*?)<\/INTERACTION>/s; const iMatch=raw.match(iRx);
       if(msg.sender==='model' && iMatch){
         try{
@@ -305,7 +283,7 @@
               const snapshot = currentInteraction;
               currentInteraction = null;
               addMessageToChat(`(Korrigiert/Ergänzt: ${value})`, 'user');
-              await handleChatFlow(`**Interaktive Korrektur/Ergänzung:** Feld (${snapshot?.interactionType}) = **${value}**. Aktualisiere den Termin-Entwurf.`);
+              await handleChatFlow(`**Interaktive Korrektur/Ergänzung:** Feld (${snapshot?.interactionType}) = **${value}**. Aktualisiere den Termin-Entwurf und prüfe, welches Feld als nächstes fehlt.`);
             }, { once:true });
             box.appendChild(b);
           });
@@ -326,7 +304,12 @@
       }
 
       if(msg.sender==='model'){ raw = raw.replace(/\{[\s\S]*?\}/g, '').trim(); }
-      if(raw.length>0){ textEl.innerHTML += formatMarkdownToHtml(raw); }
+      
+      // Validierung: Leere Antwort ohne INTERACTION/EXTRACT → Fehler
+      if(msg.sender==='model' && raw.length < 10 && !msg.text.includes('<INTERACTION>') && !msg.text.includes('<EXTRACT>')){
+        textEl.innerHTML = '<strong style="color:#DC2626;">Die KI hat eine leere Antwort geliefert. Bitte versuchen Sie es erneut oder geben Sie weitere Details ein.</strong>';
+      } else if(raw.length>0){ textEl.innerHTML += formatMarkdownToHtml(raw); }
+      
       cont.appendChild(textEl); row.appendChild(cont);
       return row;
     }
@@ -348,16 +331,21 @@
       const systemPrompt=`Sie sind der 'AI Termin-Detektiv'. Das **HEUTIGE DATUM ist: ${currentDate}**.
 
 **STRENGE FORMATREGEL:**
+Nach JEDER Nutzerantwort prüfen Sie SOFORT, welches Feld (Datum, Uhrzeit, Dauer, Ort, Zweck) noch fehlt.
 Wenn ein Feld fehlt, liefern Sie **NUR EINEN** <INTERACTION>-Block mit **GENAU** diesem JSON-Schema:
 
 {
-  "interactionType": "DAUER_SELECTION" oder "ORT_SELECTION" oder "ZWECK_SELECTION" oder "REMINDER_SELECTION",
+  "interactionType": "DAUER_SELECTION" oder "ORT_SELECTION" oder "ZWECK_SELECTION",
   "message": "Kurze deutsche Frage an den Nutzer",
   "options": [
     {"label": "Anzeigetext", "value": "Wert im korrekten Format"},
     ...
   ]
 }
+
+**WICHTIG für ORT_SELECTION:**
+- Liefern Sie GENAU 5 vollständige Adressvorschläge (Straße, Hausnummer, PLZ, Ort).
+- Falls weniger als 5 plausible Adressen existieren, ergänzen Sie mit ähnlichen/nahegelegenen Adressen.
 
 **BEISPIELE:**
 
@@ -375,23 +363,42 @@ Wenn ein Feld fehlt, liefern Sie **NUR EINEN** <INTERACTION>-Block mit **GENAU**
 }
 </INTERACTION>
 
-2. Ort fehlt:
+2. Ort fehlt (GENAU 5 Vorschläge):
 <INTERACTION>
 {
   "interactionType": "ORT_SELECTION",
-  "message": "Bitte wählen Sie die Adresse:",
+  "message": "Bitte wählen Sie die Adresse für den Termin bei Dr. Weber in Bretzenheim:",
   "options": [
     {"label": "Dr. Weber, Hauptstraße 10, 55128 Mainz-Bretzenheim", "value": "Dr. Weber, Hauptstraße 10, 55128 Mainz-Bretzenheim"},
-    {"label": "Rathaus Bretzenheim, Rathausplatz 1, 55128 Mainz", "value": "Rathaus Bretzenheim, Rathausplatz 1, 55128 Mainz"}
+    {"label": "Dr. Weber, Am Lappenberg 2, 55128 Mainz-Bretzenheim", "value": "Dr. Weber, Am Lappenberg 2, 55128 Mainz-Bretzenheim"},
+    {"label": "Dr. Weber, Lerchenbergstr. 5, 55128 Mainz-Bretzenheim", "value": "Dr. Weber, Lerchenbergstr. 5, 55128 Mainz-Bretzenheim"},
+    {"label": "Praxis Dr. Weber, Rathausplatz 1, 55128 Mainz", "value": "Praxis Dr. Weber, Rathausplatz 1, 55128 Mainz"},
+    {"label": "Dr. Weber Medizinzentrum, Kirchstraße 8, 55129 Mainz-Hechtsheim", "value": "Dr. Weber Medizinzentrum, Kirchstraße 8, 55129 Mainz-Hechtsheim"}
   ]
 }
 </INTERACTION>
 
-**WICHTIG:**
+3. Zweck fehlt (5 intelligente Vorschläge):
+<INTERACTION>
+{
+  "interactionType": "ZWECK_SELECTION",
+  "message": "Bitte wählen Sie den Zweck des Arzttermins:",
+  "options": [
+    {"label": "Regelmäßige Kontrolle", "value": "Regelmäßige Kontrolle"},
+    {"label": "Blutabnahme", "value": "Blutabnahme"},
+    {"label": "Impftermin", "value": "Impftermin"},
+    {"label": "Erstuntersuchung", "value": "Erstuntersuchung"},
+    {"label": "Folgetermin", "value": "Folgetermin"}
+  ]
+}
+</INTERACTION>
+
+**KRITISCH:**
 - Nur EIN <INTERACTION>-Block pro Antwort.
-- "value" bei Dauer MUSS Format HH:MM haben (z.B. "0:30", "1:00", "2:00").
-- "value" bei Erinnerung MUSS Minuten als String sein (z.B. "30", "60", "120").
+- "value" bei Dauer MUSS Format HH:MM haben (z.B. "0:30", "1:00").
+- "value" bei Erinnerung MUSS Minuten als String sein (z.B. "30", "60").
 - Priorisierung: Datum → Uhrzeit → Dauer → Ort → Zweck.
+- Nach jeder Korrektur SOFORT das nächste fehlende Feld abfragen.
 - Wenn alle Felder vorliegen, liefern Sie <EXTRACT>...<DATA>...</DATA></EXTRACT>.`;
 
       const historyForApi = chatHistory.map(m=>({ role:m.sender==='user'?'user':'model', parts:[{ text:m.text }] }));
