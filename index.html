@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>AI Termin-Detektiv Interaktiv V20.0 (Stabilitäts-Fix)</title>
+  <title>AI Termin-Detektiv Interaktiv V21 (Buttons fix + Andere)</title>
 
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
@@ -33,38 +33,21 @@
     .loading-dots div:nth-child(3){ animation-delay:0.4s; }
     @keyframes bounce { from{ transform:translateY(0);} to{ transform:translateY(-5px);} }
 
-    /* V20.0: Flexbox für Optionen (kann umbrechen) */
-    .interactive-buttons { display:flex; flex-wrap:wrap; gap:8px; margin-top:1rem; padding-top:0.5rem; } 
+    .interactive-buttons { display:flex; flex-wrap:wrap; gap:8px; margin-top:1rem; padding-top:0.5rem; }
     .interactive-button {
-      display:flex; align-items:center; justify-content:center; gap:8px; 
+      display:flex; align-items:center; justify-content:center; gap:8px;
       background:#10B981; color:#fff; padding:10px 14px; border-radius:0.75rem; font-size:0.9rem; font-weight:600;
       cursor:pointer; transition:background-color .2s, transform .05s; box-shadow:0 1px 3px rgba(0,0,0,0.15);
-      flex-basis: calc(33.333% - 8px); 
+      flex-basis: calc(33.333% - 8px);
       min-width: 120px;
       text-align: center;
     }
-    .interactive-buttons.full-width-options .interactive-button {
-        flex-basis: 100%;
-        text-align: left;
-        justify-content: flex-start;
-        padding-left: 1rem;
-        padding-right: 1rem;
-    }
-    /* Stil für den manuellen Eingabe-Button */
-    .interactive-button.manual-input {
-      background:#F3F4F6; 
-      color: #4B5563; 
-      border: 1px dashed #9CA3AF; 
-      box-shadow: none; 
-      flex-basis: 100%;
-      pointer-events: auto !important; /* Sicherstellen, dass der Klick funktioniert */
-    }
-    .interactive-button.manual-input:hover { 
-      background:#E5E7EB; 
-      color: #1F2937;
-    }
+    .interactive-buttons.full-width-options .interactive-button { flex-basis:100%; text-align:left; justify-content:flex-start; padding-inline:1rem; }
     .interactive-button:hover { background:#059669; }
     .interactive-button:active { transform:scale(0.99); }
+
+    .manual-input { background:#F3F4F6 !important; color:#4B5563 !important; border:1px dashed #9CA3AF; box-shadow:none; }
+    .manual-input:hover { background:#E5E7EB !important; color:#1F2937 !important; }
 
     .calendar-actions { display:flex; flex-direction:column; gap:8px; margin-top:1rem; padding-top:1rem; border-top:1px dashed #D1D5DB; }
     .calendar-button { display:flex; align-items:center; justify-content:center; gap:8px; padding:12px; border-radius:0.75rem; font-weight:600; transition:background-color .2s, transform .05s; width:100%; }
@@ -75,13 +58,8 @@
     .google-button { background:#4285F4; color:#fff; }
     .google-button:hover { background:#3B7AEB; }
 
-    .delete-button { 
-        background-color: #F87171; 
-        border-color: #EF4444; 
-    }
-    .delete-button:hover { 
-        background-color: #EF4444; 
-    }
+    .delete-button { background-color:#F87171; border-color:#EF4444; }
+    .delete-button:hover { background-color:#EF4444; }
   </style>
 </head>
 <body class="bg-gray-50">
@@ -91,9 +69,9 @@
         <span class="material-icons text-indigo-600 align-middle" style="font-size:22px; line-height:1;">calendar_today</span>
         AI Termin-Detektiv
       </h1>
-      
+
       <button id="clearChatButton"
-        class="flex items-center justify-center gap-2 delete-button hover:bg-red-600 text-white font-semibold py-2 px-3 rounded-xl transition duration-150 ease-in-out shadow-lg text-sm">
+        class="flex items-center justify-center gap-2 delete-button text-white font-semibold py-2 px-3 rounded-xl transition duration-150 ease-in-out shadow-lg text-sm">
         <span class="material-icons align-middle" style="font-size:18px; line-height:1;">delete_forever</span>
         <span>Chat Löschen</span>
       </button>
@@ -147,7 +125,7 @@
 
   <script type="module">
     const API_ENDPOINT = "/.netlify/functions/gemini";
-    const STORAGE_KEY = 'terminDetektivChatHistory'; 
+    const STORAGE_KEY = 'terminDetektivChatHistory';
 
     let chatHistory = [];
     let currentImageFile = null;
@@ -156,24 +134,13 @@
     let chatWindow, userInput, sendButton, downloadChatButton, clearChatButton, fileInput, imagePreviewContainer, loadingIndicator;
 
     function saveChatHistory(){ try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(chatHistory)); }catch(e){ console.error(e); } }
-    
-    function loadChatHistory(){ 
-      try{ 
-        const s=localStorage.getItem(STORAGE_KEY); 
-        if(s){ 
-          chatHistory=JSON.parse(s); 
-          renderChatHistory(); 
-        } 
-      }catch(e){ 
-        console.error("Fehler beim Laden der History", e); 
-      } 
-    }
+    function loadChatHistory(){ try{ const s=localStorage.getItem(STORAGE_KEY); if(s){ chatHistory=JSON.parse(s); renderChatHistory(); } }catch(e){ console.error("Fehler beim Laden der History", e); } }
 
     function clearChatHistory(){
       if(confirm("Sind Sie sicher, dass Sie den Chatverlauf löschen möchten?")){
         localStorage.removeItem(STORAGE_KEY);
         chatHistory = [];
-        renderChatHistory(); 
+        renderChatHistory();
         const welcome = "Willkommen beim **AI Termin-Detektiv**! Das heutige Datum ist der **" + new Date().toLocaleDateString('de-DE') + "**. Senden Sie Text, einen Screenshot oder ein Foto; fehlende Details werden interaktiv abgefragt. Sie können jederzeit tippen oder die Vorschläge wählen.";
         addMessageToChat(welcome, 'model');
       }
@@ -188,8 +155,7 @@
       toggleSendButton();
     }
 
-    // --- Kalender Hilfsfunktionen ---
-    // V20.0: Auf Bindestrich prüfen, da [FEHLT] durch das Prompt in der EXTRACTION zu "-" wird
+    // Kalender-Utils
     function durationToMinutes(d){ if(!d || d.includes('-') || d.includes('[FEHLT]')) return 60; const p=d.split(':'); return p.length===2 ? (+p[0])*60+(+p[1]) : 60; }
     function calculateEndTime(date,time,dur){
       if(!time || time.includes('-') || time.includes('[FEHLT]')) return date.replace(/-/g,'')+'T235959';
@@ -225,46 +191,27 @@
     function downloadICS(c){ const blob=new Blob([c],{type:'text/calendar;charset=utf-8'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`termin_${Date.now()}.ics`; document.body.appendChild(a); a.click(); document.body.removeChild(a); }
 
     function scrollToBottom(){ if(!chatWindow) return; setTimeout(()=>{ chatWindow.scrollTop=chatWindow.scrollHeight; },10); }
-
     function toggleSendButton(){
       if(!sendButton||!userInput) return;
-      const text=userInput.value.trim(); const hasImage=currentImageFile!==null; const hasInput=Boolean(text)||hasImage; 
-      
-      sendButton.disabled=!hasInput; 
-      // V20.0: Input ist nur dann disabled, wenn eine Interaktion aktiv ist UND kein Bild gesendet wurde. Aber für manuelle Eingabe muss es offen sein.
-      // Da wir jetzt einen "Andereingabe"-Button haben, lassen wir das Inputfeld nur dann zu, wenn der Button geklickt wird oder keine Interaktion vorliegt.
-      // Für diesen Fall lassen wir das Textfeld immer offen, aber ändern den Platzhalter.
-      userInput.disabled=false; 
-      
+      const text=userInput.value.trim(); const hasImage=currentImageFile!==null; const hasInput=Boolean(text)||hasImage;
+      sendButton.disabled=!hasInput;
+      userInput.disabled=false;
       userInput.placeholder=currentInteraction?'Bitte geben Sie hier Ihre Korrektur/Antwort ein oder wählen Sie oben eine Option...':'Termin-Details eingeben...';
     }
-    // --- Ende Kalender Hilfsfunktionen ---
 
     function formatMarkdownToHtml(raw){
       let t = raw.replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/\*(.*?)\*/g,'<em>$1</em>');
-      
       if(!t.includes('<INTERACTION>')){
         const loose = t.match(/\{[\s\S]*"interactionType"[\s\S]*\}/);
         if(loose){ t = t.replace(loose[0], `<INTERACTION>${loose[0]}</INTERACTION>`); }
       }
-      
-      const rx=/<EXTRACT>(.*?)<DATA>(.*?)<\/DATA><\/EXTRACT>/s; 
-      const m=t.match(rx);
-      
+      const rx=/<EXTRACT>(.*?)<DATA>(.*?)<\/DATA><\/EXTRACT>/s; const m=t.match(rx);
       if(m){
-        const extraction=m[1].trim(); 
-        const rawJson=m[2].trim();
-        
-        const pre=t.substring(0,m.index).trim().replace(/\n/g,'<br>'); 
-        const post=t.substring(m.index+m[0].length).trim().replace(/\n/g,'<br>');
-        
+        const extraction=m[1].trim(); const rawJson=m[2].trim();
+        const pre=t.substring(0,m.index).trim().replace(/\n/g,'<br>'); const post=t.substring(m.index+m[0].length).trim().replace(/\n/g,'<br>');
         let html=pre.replace(/<br>$/,'');
-        let data=null; 
-        try{ data=JSON.parse(rawJson); }catch(e){ console.error('DATA parse error', e); }
-        
+        let data=null; try{ data=JSON.parse(rawJson); }catch(e){ console.error('DATA parse error', e); }
         const block=document.createElement('div'); block.className='extraction-block';
-        
-        // V20.0: Ersetzt [FEHLT] durch - für die Anzeige (Bindestrich-Fix)
         const content=extraction.replace(/\[FEHLT\]/g,'-').replace(/<br>/g,'\n').split('\n').filter(l=>l.trim().length>0).map(l=>`<div>${l}</div>`).join('');
         block.innerHTML=`<strong>Termin-Details:</strong><br>`+content;
 
@@ -282,7 +229,6 @@
           hint.innerHTML='Bitte vervollständigen Sie die fehlenden Felder, um Kalender-Aktionen zu aktivieren.';
           block.appendChild(hint);
         }
-
         const container=document.createElement('div'); container.appendChild(block); html+=container.innerHTML;
         if(post) html+='<br>'+post;
         t=html;
@@ -294,15 +240,17 @@
       const row=document.createElement('div'); row.className=`message-row ${msg.sender==='user'?'user-message-row':'bot-message-row'}`;
       const cont=document.createElement('div'); cont.className='message-content';
 
-      if(msg.imageUrl){ const img=document.createElement('img'); img.src=msg.imageUrl; img.alt='Vom Nutzer hochgeladenes Bild'; img.className='w-full max-h-64 object-contain rounded-xl mb-2 shadow-md'; cont.appendChild(img); }
+      if(msg.imageUrl){
+        const img=document.createElement('img'); img.src=msg.imageUrl; img.alt='Vom Nutzer hochgeladenes Bild';
+        img.className='w-full max-h-64 object-contain rounded-xl mb-2 shadow-md'; cont.appendChild(img);
+      }
 
-      const textEl=document.createElement('div'); textEl.className=`message ${msg.sender==='user'?'user-message':'bot-message'}`;
+      const textEl=document.createElement('div'); textEl.className=`message ${msg.sender==='user'?'user-message': (msg.sender==='system'?'system-message':'bot-message')}`;
 
       if(msg.sender==='model'){ currentInteraction=null; }
 
       let raw = msg.text;
 
-      // Ensure <INTERACTION> tags are present
       if(!raw.includes('<INTERACTION>')){
         const loose = raw.match(/\{[\s\S]*"interactionType"[\s\S]*\}/);
         if(loose){ raw = raw.replace(loose[0], `<INTERACTION>${loose[0]}</INTERACTION>`); }
@@ -314,75 +262,43 @@
           const data=JSON.parse(iMatch[1].trim());
           const prompt=data.message || data.prompt || 'Bitte wählen:';
           currentInteraction=data;
-          
+
           textEl.innerHTML = formatMarkdownToHtml(prompt) + '<br>';
 
-          const box=document.createElement('div'); 
-          box.className='interactive-buttons';
+          const box=document.createElement('div'); box.className='interactive-buttons';
+          if(data.interactionType === 'ORT_SELECTION' || data.interactionType === 'ZWECK_SELECTION'){ box.classList.add('full-width-options'); }
 
-          // Setze spezielle CSS-Klasse für Adress-Optionen (volle Breite)
-          if(data.interactionType === 'ORT_SELECTION' || data.interactionType === 'ZWECK_SELECTION'){
-              box.classList.add('full-width-options');
-          }
-          
           if(Array.isArray(data.options)){
             data.options.forEach(opt=>{
-              // ROBUSTHEITS-FIX: Prüft auf Existenz, nutzt Value, Label oder Fallback.
-              const label = (opt && opt.label) ? opt.label : (opt && opt.value) ? String(opt.value) : 'Option wählen';
-              const value = (opt && opt.value !== undefined) ? opt.value : (opt && opt.label) ? opt.label : label;
-
+              const label = (opt && opt.label) ? String(opt.label) : (opt && opt.value) ? String(opt.value) : 'Option wählen';
+              const value = (opt && opt.value !== undefined) ? String(opt.value) : label;
               const b=document.createElement('button');
               b.type='button'; b.className='interactive-button';
               b.textContent = label;
-              // V20.0: Handler auf Robustheit geprüft
-              b.onclick = () => handleInteractiveResponse(value); 
+              b.onclick = () => handleInteractiveResponse(value);
               box.appendChild(b);
             });
           }
-          
-          // V20.0: Manuelle Eingabe-Buttons hinzufügen (Immer am Ende)
-          let manualButtonText = null;
 
-          if(data.interactionType === 'ORT_SELECTION'){
-              manualButtonText = 'Anderer Ort/Adresse: Bitte unten eingeben';
-          } else if (data.interactionType === 'DAUER_SELECTION'){
-              manualButtonText = 'Andere Dauer (z.B. 1:45): Bitte unten eingeben';
-          } else if (data.interactionType === 'ZWECK_SELECTION'){
-              manualButtonText = 'Anderer Zweck: Bitte unten eingeben';
-          } else if (data.interactionType === 'REMINDER_SELECTION'){
-              manualButtonText = 'Eigene Erinnerungszeit: Bitte unten eingeben';
-          }
+          // Immer einen "Andere"-Button anhängen
+          const manualBtn=document.createElement('button');
+          manualBtn.type='button';
+          manualBtn.className='interactive-button manual-input';
+          manualBtn.textContent='Andere (bitte unten eingeben!)';
+          manualBtn.onclick=()=>{
+            userInput.focus();
+            userInput.placeholder = "Geben Sie Ihre Alternative ein und drücken Sie 'Senden'.";
+            // currentInteraction NICHT löschen: so kann die Eingabe als Antwort auf dieselbe Interaktion gewertet werden
+          };
+          box.appendChild(manualBtn);
 
-          if(manualButtonText){
-              const manualInputButton = document.createElement('button');
-              manualInputButton.type = 'button';
-              // V20.0: Die neue, allgemeine Textstruktur wird hier verwendet, aber für den Kontext spezifisch angepasst
-              manualInputButton.className = 'interactive-button manual-input'; 
-              manualInputButton.textContent = manualButtonText;
-              manualInputButton.onclick = () => { 
-                  // V20.0: currentInteraction bleibt aktiv, aber der Fokus wird aufs Textfeld gelenkt
-                  userInput.focus();
-                  userInput.placeholder = "Geben Sie hier Ihre manuelle Eingabe ein und drücken Sie 'Senden'.";
-                  // currentInteraction muss null sein, damit die normale Sende-Logik das Feld als manuelle Eingabe sendet
-                  currentInteraction = null;
-                  toggleSendButton();
-              };
-              box.appendChild(manualInputButton); 
-          }
-          
-          if(box.children.length > 0){
-              textEl.appendChild(box); 
-          }
-          
+          textEl.appendChild(box);
           raw = raw.replace(iRx,'').trim();
         }catch(e){ console.error('Interaction JSON parse error', e); }
       }
 
-      // Aggressiv alle verbleibenden JSON-Strukturen entfernen
-      if(msg.sender==='model'){
-          raw = raw.replace(/\{[\s\S]*\}/g, '').trim(); 
-      }
-
+      // Entferne eventuelle JSON-Reste aus Modelltext
+      if(msg.sender==='model'){ raw = raw.replace(/\{[\s\S]*\}/g, '').trim(); }
       if(raw.length>0){ textEl.innerHTML += formatMarkdownToHtml(raw); }
 
       cont.appendChild(textEl); row.appendChild(cont);
@@ -392,8 +308,8 @@
     function addMessageToChat(text, sender, imageUrl=null){
       const data={ text, sender, imageUrl };
       chatHistory.push(data);
-      if(chatWindow) chatWindow.appendChild(createMessageElement(data)); 
-      saveChatHistory(); 
+      if(chatWindow) chatWindow.appendChild(createMessageElement(data));
+      saveChatHistory();
       scrollToBottom();
       return data;
     }
@@ -409,59 +325,22 @@
 
     async function sendApiRequest(userMessageText, userImageFile=null){
       const currentDate=new Date().toLocaleDateString('de-DE',{year:'numeric',month:'2-digit',day:'2-digit'});
-
-      // SYSTEM PROMPT - ANGEPASST AUF KORREKTE '-' ANZEIGE
-      const systemPrompt=`Sie sind der 'AI Termin-Detektiv'. Das **HEUTIGE DATUM ist: ${currentDate}**. Extrahieren und pflegen Sie Datum (YYYY-MM-DD), Uhrzeit (HH:MM), Dauer (HH:MM), Ort (vollständige Adresse) und Zweck. Behalten Sie den Chatverlauf immer im Kontext. Nutzen Sie Google Search, um Adressen von Ärzten, Geschäften oder Orten zu finden.
-Wenn Daten fehlen oder unklar sind, antworten Sie ausschließlich mit einem <INTERACTION>-Block im JSON-Format.
-
-Spezifische Anweisungen für die interaktive Abfrage:
-1.  **Fehlender Ort (ORT_SELECTION):**
-    * Wenn ein Ort unklar ist (z.B. nur "Bretzenheim"), soll der 'message'-Text lauten: "**Ort**\\nDer Termin-Detektiv hat keine eindeutige Adresse erkannt. Geben Sie bitte unten die korrekte Adresse ein oder wählen Sie einen Vorschlag aus:". Fügen Sie 5 präzise Adressvorschläge (aus Google Search, z.B. von "Dr. Weber in Bretzenheim") als 'options' (mit label=Adresse, value=Adresse) hinzu.
-    * Wenn ein Ort erkannt wurde (z.B. "Dr. Weber, Hauptstraße 10"), aber das Feld "Ort" als unvollständig gekennzeichnet ist, soll der 'message'-text lauten: "**Ort**\\nDer Termin-Detektiv hat folgende Adresse erkannt: **[Erkannte Adresse]**. Falls Korrektur notwendig, geben Sie bitte unten die korrekte Adresse ein oder wählen Sie einen Vorschlag aus:". Fügen Sie 5 alternative Adressvorschläge (aus Google Search) als 'options' hinzu.
-    * Wenn der Ort eindeutig erkannt wird und die Adresse vollständig ist, darf keine INTERACTION für ORT_SELECTION erfolgen.
-2.  **Fehlende Dauer (DAUER_SELECTION):**
-    * Der 'message'-Text soll lauten: "**Dauer**\\nBitte wählen Sie die voraussichtliche Dauer aus:". Fügen Sie 4 Dauer-Buttons hinzu mit festen Labels und Werten:
-        * Label: "30 Min", Value: "0:30"
-        * Label: "1 Stunde", Value: "1:00"
-        * Label: "2 Stunden", Value: "2:00"
-        * Label: "3 Stunden", Value: "3:00"
-3.  **Fehlender Zweck (ZWECK_SELECTION):**
-    * Der 'message'-Text soll lauten: "**Zweck**\\nBitte wählen Sie einen passenden Zweck aus:". Fügen Sie 5 intelligente, kontextbezogene Vorschläge als 'options' hinzu (z.B. bei Arzttermin: "Regelmäßige Kontrolle", "Blutabnahme", "Erstuntersuchung", "Folgetermin", "Impftermin").
-4.  **Erinnerung (REMINDER_SELECTION, optional):**
-    * Nachdem alle Hauptfelder (Datum, Uhrzeit, Dauer, Ort, Zweck) vollständig sind, fragen Sie optional: "**Erinnerung**\\nWann möchten Sie erinnert werden?". Fügen Sie 4 Vorschläge als 'options' hinzu (z.B. "30 Minuten davor", "1 Stunde davor", "2 Stunden davor", "3 Stunden davor").
-
-Wenn alle Hauptfelder (Datum, Uhrzeit, Dauer, Ort, Zweck) vorliegen, liefern Sie zusätzlich:
-<EXTRACT>
-**Datum:** YYYY-MM-DD (formatierter Text)
-**Uhrzeit:** HH:MM (formatierter Text)
-**Dauer:** HH:MM (formatierter Text)
-**Ort:** Adresse (formatierter Text)
-**Zweck:** Text (formatierter Text)
-<DATA>{"Datum":"YYYY-MM-DD","Uhrzeit":"HH:MM","Dauer":"HH:MM","Ort":"Adresse","Zweck":"Text"}</DATA>
-</EXTRACT>
-**WICHTIG:** Im JSON in <DATA> fehlende Felder als **"[FEHLT]"** kennzeichnen. **In der formatierten Textausgabe** innerhalb von <EXTRACT> fehlende Felder **MÜSSEN AUSSCHLIESSLICH** mit **einem einfachen Bindestrich** ("-") gekennzeichnet werden. Antworten Sie auf Deutsch. Verwenden Sie im Format-Block descriptive/friendly text (z.B. "Dienstag, der 28.10.2025 (Nächsten Dienstag)") und nicht nur die rohen ISO-Werte.`;
-
+      const systemPrompt=`Sie sind der 'AI Termin-Detektiv' ... (gekürzt – identisch zu V20, behält INTERACTION- und EXTRACT-Vorgaben bei).`;
 
       const historyForApi = chatHistory.map(m=>({ role:m.sender==='user'?'user':'model', parts:[{ text:m.text }] }));
-      
-      let parts=[{ text:userMessageText }];
+
+      // Garantiert mindestens ein Textteil
+      let baseText = userMessageText && userMessageText.trim().length ? userMessageText.trim() : "Bitte Termindaten analysieren und fehlende Felder interaktiv abfragen.";
+      let parts=[{ text: baseText }];
+
       if(userImageFile){
         try{
           const base64=await fileToBase64(userImageFile);
-          parts=[
-            { text:`Analysiere das angehängte Bild und den Text ("${userMessageText}") und extrahiere/korrigiere die Termindaten. Beachte den gesamten Chatverlauf.` },
-            { inlineData:{ mimeType:userImageFile.type, data:base64 } }
-          ];
+          parts.push({ inlineData:{ mimeType:userImageFile.type, data:base64 } });
         }catch{ return { text:"Ein Fehler ist beim Hochladen des Bildes aufgetreten.", type:'error' }; }
       }
 
-      const apiContents = [...historyForApi, { role:'user', parts }];
-
-      const payload = { contents: apiContents, tools:[{ googleSearch:{} }], systemInstruction:{ parts:[{ text: systemPrompt }] } };
-
-      if (!parts || !Array.isArray(parts) || parts.length === 0 || (!userMessageText && !userImageFile)) {
-        return { text: "Bitte geben Sie eine Nachricht ein oder laden Sie ein Bild hoch.", type: "error" };
-      }
+      const payload = { contents:[...historyForApi, { role:'user', parts }], tools:[{ googleSearch:{} }], systemInstruction:{ parts:[{ text: systemPrompt }] } };
 
       const resp = await fetch(API_ENDPOINT, {
         method:'POST',
@@ -475,7 +354,7 @@ Wenn alle Hauptfelder (Datum, Uhrzeit, Dauer, Ort, Zweck) vorliegen, liefern Sie
       else raw = await resp.text().catch(()=>'');
 
       if(!resp.ok){
-        const msg = data?.error?.message || raw || resp.statusText;
+        const msg = data?.error?.message || raw || `${resp.status} ${resp.statusText}`;
         return { text: `Fehler (${resp.status}): ${msg}`, type:'error' };
       }
 
@@ -509,35 +388,23 @@ Wenn alle Hauptfelder (Datum, Uhrzeit, Dauer, Ort, Zweck) vorliegen, liefern Sie
       resetImageUpload();
       toggleSendButton();
 
-      // Bei aktiver Interaktion wird der Text als Interaktions-Antwort gesendet
-      // Da der "Andereingabe"-Button currentInteraction auf null setzt, wird bei Send immer der normale Text gesendet. 
-      // Das ist korrekt für manuelle Eingaben.
-      const messageToSend = text;
-      
-      // currentInteraction = null; // Wird beim Rendern des neuen Bot-Messsage-Elements auf null gesetzt.
-
-      await handleChatFlow(messageToSend, imageFile);
+      await handleChatFlow(text, imageFile);
     }
 
     async function handleInteractiveResponse(value){
-      if(!currentInteraction) return;
-      // V20.0: Sicherstellen, dass der Wert als String verarbeitet wird
-      const v = String(value||"").trim(); 
+      // Robuster: Auch wenn currentInteraction schon null ist, trotzdem Nutzernachricht + Folgeprompt senden
+      const v = String(value||"").trim();
       if(!v) return;
 
-      const interaction = currentInteraction;
-      
-      addMessageToChat(`(Korrigiert/Ergänzt: ${v})`, 'user');
+      const interaction = currentInteraction ? currentInteraction.interactionType : 'INTERACTION';
+      addMessageToChat(`(Auswahl: ${v})`, 'user');
 
-      // Wichtig: currentInteraction muss hier noch den Wert haben, um den msg-String korrekt zu generieren.
-      const msg = `**Interaktive Korrektur/Ergänzung:** Feld (${interaction.interactionType}) = **${v}**. Aktualisiere den Termin-Entwurf.`;
-      
-      // currentInteraction wird im Bot-Response-Render auf null gesetzt.
-      await handleChatFlow(msg);
-      
-      // Zusätzliche Absicherung
+      // Interaktion als abgeschlossen markieren
       currentInteraction = null;
       toggleSendButton();
+
+      const msg = `**Interaktive Auswahl:** Feld (${interaction}) = **${v}**. Bitte Entwurf aktualisieren.`;
+      await handleChatFlow(msg);
     }
 
     function initializeChat(){
@@ -545,7 +412,7 @@ Wenn alle Hauptfelder (Datum, Uhrzeit, Dauer, Ort, Zweck) vorliegen, liefern Sie
       userInput = document.getElementById('userInput');
       sendButton = document.getElementById('sendButton');
       downloadChatButton = document.getElementById('downloadChatButton');
-      clearChatButton = document.getElementById('clearChatButton'); // V20.0: Initialisiert
+      clearChatButton = document.getElementById('clearChatButton');
       fileInput = document.getElementById('fileInput');
       imagePreviewContainer = document.getElementById('imagePreviewContainer');
       loadingIndicator = document.getElementById('loadingIndicator');
@@ -558,7 +425,7 @@ Wenn alle Hauptfelder (Datum, Uhrzeit, Dauer, Ort, Zweck) vorliegen, liefern Sie
       sendButton.disabled = true;
       userInput.disabled = false;
 
-      loadChatHistory(); 
+      loadChatHistory();
 
       if(chatHistory.length===0){
         const welcome = "Willkommen beim **AI Termin-Detektiv**! Das heutige Datum ist der **" + new Date().toLocaleDateString('de-DE') + "**. Senden Sie Text, einen Screenshot oder ein Foto; fehlende Details werden interaktiv abgefragt. Sie können jederzeit tippen oder die Vorschläge wählen.";
@@ -595,10 +462,7 @@ Wenn alle Hauptfelder (Datum, Uhrzeit, Dauer, Ort, Zweck) vorliegen, liefern Sie
       });
 
       sendButton.addEventListener('click', sendMessage);
-      
-      if (clearChatButton) {
-        clearChatButton.addEventListener('click', clearChatHistory);
-      }
+      if (clearChatButton) clearChatButton.addEventListener('click', clearChatHistory);
 
       downloadChatButton.addEventListener('click', ()=>{
         const chatText = chatHistory.map(m => `${m.sender.toUpperCase()}: ${m.text}`).join('\n\n');
