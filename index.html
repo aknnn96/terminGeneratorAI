@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>AI Termin-Detektiv V24 (Final-Final mit 5 Adressvorschlägen)</title>
+  <title>AI Termin-Detektiv V25 (Production-Ready)</title>
 
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
@@ -47,8 +47,12 @@
     .interactive-button:active { transform:scale(0.99); }
     .interactive-button:disabled { opacity:0.5; cursor:not-allowed; }
 
+    .generate-button { background:#8B5CF6; color:#fff; padding:12px 20px; border-radius:0.75rem; font-weight:700; cursor:pointer; transition:background .2s, transform .05s; box-shadow:0 2px 6px rgba(139,92,246,0.3); width:100%; margin-top:1rem; display:flex; align-items:center; justify-content:center; gap:8px; }
+    .generate-button:hover { background:#7C3AED; }
+    .generate-button:active { transform:scale(0.99); }
+
     .calendar-actions { display:flex; flex-direction:column; gap:8px; margin-top:1rem; padding-top:1rem; border-top:1px dashed #D1D5DB; }
-    .calendar-button { display:flex; align-items:center; justify-content:center; gap:8px; padding:12px; border-radius:0.75rem; font-weight:600; transition:background .2s, transform .05s; width:100%; }
+    .calendar-button { display:flex; align-items:center; justify-content:center; gap:8px; padding:12px; border-radius:0.75rem; font-weight:600; transition:background .2s, transform .05s; width:100%; cursor:pointer; }
     .calendar-button .material-icons { font-size:18px; vertical-align:middle; }
     .calendar-button:active { transform:scale(0.99); }
     .ics-button { background:#EF4444; color:#fff; }
@@ -122,10 +126,12 @@
   <script type="module">
     const API_ENDPOINT = "/.netlify/functions/gemini";
     const STORAGE_KEY = 'terminDetektivChatHistory';
+    const UNLOCK_CODE = "10122022";
 
     let chatHistory = [];
     let currentImageFile = null;
     let currentInteraction = null;
+    let unlocked = false;
 
     let chatWindow, userInput, sendButton, downloadChatButton, clearChatButton, fileInput, imagePreviewContainer, loadingIndicator;
 
@@ -229,18 +235,28 @@
         const block=document.createElement('div'); block.className='extraction-block';
         const content=extraction.replace(/\[FEHLT\]/g,'-').replace(/<br>/g,'\n').split('\n').filter(l=>l.trim().length>0).map(l=>`<div>${l}</div>`).join('');
         block.innerHTML=`<strong>Termin-Details:</strong><br>`+content;
-        const ready = data && data.Datum && !data.Datum.includes('[FEHLT]') && data.Dauer && !data.Dauer.includes('[FEHLT]');
+        
+        const ready = data && data.Datum && !data.Datum.includes('[FEHLT]') && data.Dauer && !data.Dauer.includes('[FEHLT]') && data.Ort && !data.Ort.includes('[FEHLT]') && data.Zweck && !data.Zweck.includes('[FEHLT]');
+        
         if(ready){
-          const actions=document.createElement('div'); actions.className='calendar-actions';
-          const g=document.createElement('a'); g.href=createGoogleCalendarLink(data); g.target='_blank'; g.className='calendar-button google-button';
-          g.innerHTML=`<span class="material-icons" style="font-size:18px;">event_available</span><span>Zum Google Kalender hinzufügen</span>`;
-          const icsBtn=document.createElement('button'); icsBtn.className='calendar-button ics-button';
-          icsBtn.innerHTML=`<span class="material-icons" style="font-size:18px;">download</span><span>ICS-Datei herunterladen</span>`;
-          icsBtn.onclick=()=>downloadICS(createICSContent(data));
-          actions.appendChild(g); actions.appendChild(icsBtn); block.appendChild(actions);
+          // "Termin generieren"-Button
+          const genBtn=document.createElement('button'); genBtn.className='generate-button';
+          genBtn.innerHTML=`<span class="material-icons" style="font-size:20px;">event</span><span>Termin generieren</span>`;
+          genBtn.onclick=(ev)=>{
+            ev.target.style.display='none'; // Button ausblenden
+            const actions=document.createElement('div'); actions.className='calendar-actions';
+            const g=document.createElement('a'); g.href=createGoogleCalendarLink(data); g.target='_blank'; g.className='calendar-button google-button';
+            g.innerHTML=`<span class="material-icons" style="font-size:18px;">event_available</span><span>Zum Google Kalender hinzufügen</span>`;
+            const icsBtn=document.createElement('button'); icsBtn.className='calendar-button ics-button';
+            icsBtn.innerHTML=`<span class="material-icons" style="font-size:18px;">download</span><span>ICS-Datei herunterladen</span>`;
+            icsBtn.onclick=()=>downloadICS(createICSContent(data));
+            actions.appendChild(g); actions.appendChild(icsBtn);
+            block.appendChild(actions);
+          };
+          block.appendChild(genBtn);
         } else if (data) {
           const hint=document.createElement('p'); hint.className='text-sm text-gray-500 mt-3 border-t border-gray-200 pt-3';
-          hint.innerHTML='Bitte vervollständigen Sie die fehlenden Felder, um Kalender-Aktionen zu aktivieren.';
+          hint.innerHTML='Bitte vervollständigen Sie die fehlenden Felder.';
           block.appendChild(hint);
         }
         const container=document.createElement('div'); container.appendChild(block); html+=container.innerHTML; if(post) html+='<br>'+post; t=html;
@@ -283,7 +299,7 @@
               const snapshot = currentInteraction;
               currentInteraction = null;
               addMessageToChat(`(Korrigiert/Ergänzt: ${value})`, 'user');
-              await handleChatFlow(`**Interaktive Korrektur/Ergänzung:** Feld (${snapshot?.interactionType}) = **${value}**. Aktualisiere den Termin-Entwurf und prüfe, welches Feld als nächstes fehlt.`);
+              await handleChatFlow(`**Interaktive Korrektur/Ergänzung:** Feld (${snapshot?.interactionType}) = **${value}**. Aktualisiere den Termin-Entwurf und prüfe, welches Feld als nächstes fehlt. Wenn ALLE Felder vorliegen, liefere SOFORT <EXTRACT> mit vollständigem <DATA>-JSON.`);
             }, { once:true });
             box.appendChild(b);
           });
@@ -305,9 +321,8 @@
 
       if(msg.sender==='model'){ raw = raw.replace(/\{[\s\S]*?\}/g, '').trim(); }
       
-      // Validierung: Leere Antwort ohne INTERACTION/EXTRACT → Fehler
       if(msg.sender==='model' && raw.length < 10 && !msg.text.includes('<INTERACTION>') && !msg.text.includes('<EXTRACT>')){
-        textEl.innerHTML = '<strong style="color:#DC2626;">Die KI hat eine leere Antwort geliefert. Bitte versuchen Sie es erneut oder geben Sie weitere Details ein.</strong>';
+        textEl.innerHTML = '<strong style="color:#DC2626;">Die KI hat eine leere oder unvollständige Antwort geliefert. Bitte versuchen Sie es erneut oder geben Sie weitere Details ein.</strong>';
       } else if(raw.length>0){ textEl.innerHTML += formatMarkdownToHtml(raw); }
       
       cont.appendChild(textEl); row.appendChild(cont);
@@ -328,10 +343,25 @@
     async function sendApiRequest(userMessageText, userImageFile=null){
       const currentDate=new Date().toLocaleDateString('de-DE',{year:'numeric',month:'2-digit',day:'2-digit'});
 
+      // Unlock-Check
+      if(userMessageText.trim() === UNLOCK_CODE){
+        unlocked = true;
+        return { text: "🔓 **Freier Modus aktiviert.** Sie können nun beliebige Fragen stellen.", type:'success' };
+      }
+
       const systemPrompt=`Sie sind der 'AI Termin-Detektiv'. Das **HEUTIGE DATUM ist: ${currentDate}**.
 
+**ABSOLUTE EINSCHRÄNKUNG:**
+Sie dürfen AUSSCHLIESSLICH Terminanfragen bearbeiten. Wenn der Nutzer etwas anderes fragt (z.B. "Was ist die Hauptstadt von Frankreich?"), antworten Sie NUR:
+"Ich bin ausschließlich für die Terminvereinbarung zuständig. Bitte geben Sie Termin-Details ein (Datum, Uhrzeit, Ort, Zweck)."
+
 **STRENGE FORMATREGEL:**
-Nach JEDER Nutzerantwort prüfen Sie SOFORT, welches Feld (Datum, Uhrzeit, Dauer, Ort, Zweck) noch fehlt.
+Nach JEDER Nutzerantwort prüfen Sie SOFORT, welches Feld (Datum, Uhrzeit, Dauer, Ort, Zweck) noch fehlt oder unvollständig ist.
+
+**Ort-Logik:**
+- Wenn der Ort EINDEUTIG und VOLLSTÄNDIG ist (z.B. "Dr. Weber, Hauptstraße 10, 55128 Mainz-Bretzenheim"), überspringen Sie ORT_SELECTION und gehen direkt zum nächsten Feld.
+- Wenn der Ort UNKLAR oder UNVOLLSTÄNDIG ist (z.B. nur "Bretzenheim" oder "Dr. Weber"), liefern Sie GENAU 5 passende Adressvorschläge basierend auf den bereits bekannten Daten (Name, Zweck, Stadt).
+
 Wenn ein Feld fehlt, liefern Sie **NUR EINEN** <INTERACTION>-Block mit **GENAU** diesem JSON-Schema:
 
 {
@@ -342,10 +372,6 @@ Wenn ein Feld fehlt, liefern Sie **NUR EINEN** <INTERACTION>-Block mit **GENAU**
     ...
   ]
 }
-
-**WICHTIG für ORT_SELECTION:**
-- Liefern Sie GENAU 5 vollständige Adressvorschläge (Straße, Hausnummer, PLZ, Ort).
-- Falls weniger als 5 plausible Adressen existieren, ergänzen Sie mit ähnlichen/nahegelegenen Adressen.
 
 **BEISPIELE:**
 
@@ -363,7 +389,7 @@ Wenn ein Feld fehlt, liefern Sie **NUR EINEN** <INTERACTION>-Block mit **GENAU**
 }
 </INTERACTION>
 
-2. Ort fehlt (GENAU 5 Vorschläge):
+2. Ort unvollständig (GENAU 5 Vorschläge basierend auf bereits bekannten Daten):
 <INTERACTION>
 {
   "interactionType": "ORT_SELECTION",
@@ -378,7 +404,7 @@ Wenn ein Feld fehlt, liefern Sie **NUR EINEN** <INTERACTION>-Block mit **GENAU**
 }
 </INTERACTION>
 
-3. Zweck fehlt (5 intelligente Vorschläge):
+3. Zweck fehlt (5 intelligente, kontextbezogene Vorschläge):
 <INTERACTION>
 {
   "interactionType": "ZWECK_SELECTION",
@@ -396,10 +422,18 @@ Wenn ein Feld fehlt, liefern Sie **NUR EINEN** <INTERACTION>-Block mit **GENAU**
 **KRITISCH:**
 - Nur EIN <INTERACTION>-Block pro Antwort.
 - "value" bei Dauer MUSS Format HH:MM haben (z.B. "0:30", "1:00").
-- "value" bei Erinnerung MUSS Minuten als String sein (z.B. "30", "60").
 - Priorisierung: Datum → Uhrzeit → Dauer → Ort → Zweck.
 - Nach jeder Korrektur SOFORT das nächste fehlende Feld abfragen.
-- Wenn alle Felder vorliegen, liefern Sie <EXTRACT>...<DATA>...</DATA></EXTRACT>.`;
+- Wenn ALLE Felder vorliegen (Datum, Uhrzeit, Dauer, Ort, Zweck), liefern Sie SOFORT:
+<EXTRACT>
+**Datum:** YYYY-MM-DD (formatierter Text)
+**Uhrzeit:** HH:MM
+**Dauer:** HH:MM
+**Ort:** Vollständige Adresse
+**Zweck:** Text
+<DATA>{"Datum":"YYYY-MM-DD","Uhrzeit":"HH:MM","Dauer":"HH:MM","Ort":"Adresse","Zweck":"Text"}</DATA>
+</EXTRACT>
+KEINE weiteren Fragen, KEINE zusätzlichen Texte.`;
 
       const historyForApi = chatHistory.map(m=>({ role:m.sender==='user'?'user':'model', parts:[{ text:m.text }] }));
 
@@ -411,7 +445,9 @@ Wenn ein Feld fehlt, liefern Sie **NUR EINEN** <INTERACTION>-Block mit **GENAU**
         }catch{ return { text:"Ein Fehler ist beim Hochladen des Bildes aufgetreten.", type:'error' }; }
       }
 
-      const payload = { contents:[...historyForApi, { role:'user', parts }], systemInstruction:{ parts:[{ text: systemPrompt }] } };
+      const payload = unlocked 
+        ? { contents:[...historyForApi, { role:'user', parts }] }
+        : { contents:[...historyForApi, { role:'user', parts }], systemInstruction:{ parts:[{ text: systemPrompt }] } };
 
       if (!parts || !Array.isArray(parts) || parts.length === 0 || (!userMessageText && !userImageFile)) { return { text: "Bitte geben Sie eine Nachricht ein oder laden Sie ein Bild hoch.", type: "error" }; }
 
