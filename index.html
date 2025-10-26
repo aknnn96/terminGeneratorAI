@@ -3,9 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Termin-Generator (mit Korrektur-Buttons)</title>
+    <title>AI Termin-Generator (Robuste Version)</title>
     
-    <!-- Lade Tailwind CSS für modernes Styling -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     
@@ -13,13 +12,14 @@
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
         body { font-family: 'Inter', sans-serif; }
 
-        /* Custom Styles für eine bessere Darstellung und Scroll-Verhalten */
-        .chat-container { height: 90vh; }
+        /* Custom Styles */
+        .chat-container { height: 90vh; min-height: 600px; } /* Feste Mindesthöhe hinzugefügt */
         .chat-window { scroll-behavior: smooth; }
         .message-row { display: flex; margin-bottom: 0.75rem; }
         .user-message-row { justify-content: flex-end; }
         .bot-message-row { justify-content: flex-start; }
-        .message { padding: 0.75rem 1rem; border-radius: 1.5rem; max-width: 80%; line-height: 1.4; word-wrap: break-word; font-size: 0.95rem; } 
+        /* Max-Breite auf 85% erhöht für bessere Lesbarkeit auf Desktop */
+        .message { padding: 0.75rem 1rem; border-radius: 1.5rem; max-width: 85%; line-height: 1.4; word-wrap: break-word; font-size: 0.95rem; } 
         .user-message { 
             background-color: #DCF8C6; 
             margin-left: auto; 
@@ -48,12 +48,6 @@
             transition: all 0.2s; 
             font-weight: 500;
         }
-        .action-button:disabled, .correction-button:disabled { 
-            opacity: 0.6; 
-            cursor: not-allowed; 
-        }
-
-        /* Korrekturbuttons */
         .correction-button {
             padding: 0.5rem 0.75rem;
             border-radius: 9999px; /* Pill shape */
@@ -71,11 +65,18 @@
             background-color: #E5E7EB;
             border-color: #9CA3AF;
         }
-
         /* Textarea Höhe anpassen */
         #user-input {
             min-height: 40px; 
             max-height: 150px;
+            /* Scrollbar nur anzeigen, wenn nötig */
+            overflow-y: auto;
+        }
+        /* Container für Loading-Dots, um die Höhe des Bot-Messages zu erzwingen */
+        .loading-content {
+            display: flex;
+            align-items: center;
+            min-height: 1.5rem; /* Mindesthöhe für die Punkte */
         }
     </style>
 </head>
@@ -87,8 +88,7 @@
         <h1 class="text-xl font-bold flex items-center">
             <span class="material-icons mr-2">smart_toy</span> AI Termin-Detektiv
         </h1>
-        <div class="action-buttons flex space-x-2">
-            <button onclick="downloadChat()" title="Chat als HTML herunterladen" class="p-1 rounded-full hover:bg-indigo-700 transition">
+        <div class="action-buttons flex space-x-2 items-center"> <button onclick="downloadChat()" title="Chat als HTML herunterladen" class="p-1 rounded-full hover:bg-indigo-700 transition">
                 <span class="material-icons">cloud_download</span>
             </button>
             <button onclick="deleteChatConfirmation()" title="Chatverlauf löschen (lokal)" class="p-1 rounded-full hover:bg-indigo-700 transition">
@@ -98,32 +98,21 @@
     </header>
     
     <div class="chat-window flex-grow p-4 overflow-y-auto bg-gray-50" id="chat-window">
-        <div class="message-row bot-message-row">
-            <div class="message bot-message">
-                <p>Willkommen zurück! Ich bin Ihr AI Termin-Detektiv. Geben Sie mir einen Text oder ein Bild, und ich extrahiere das Datum, die Zeit und den Zweck.</p>
-                <p class="mt-2 text-indigo-700 font-medium">Ich erkenne jetzt auch **Tippfehler in Namen oder Orten** und schlage Korrekturen vor!</p>
-                <p class="text-xs text-gray-500 mt-2">✅ Gemini API ist verbunden. Der Chat merkt sich den gesamten Verlauf für Kontext und Korrekturen.</p>
-            </div>
         </div>
-        <!-- Hier werden die Nachrichten eingefügt -->
-    </div>
     
-    <!-- Bild-Vorschau-Bereich -->
     <div id="image-preview-container" class="hidden p-3 border-t border-gray-200 bg-white flex items-center">
         <img id="image-preview" src="#" alt="Vorschau des hochgeladenen Bildes" class="max-h-12 w-auto rounded mr-3">
         <span id="image-filename" class="text-sm text-gray-600 truncate"></span>
         <span id="cancel-upload" class="material-icons text-red-500 ml-auto cursor-pointer" title="Bild entfernen">close</span>
     </div>
     
-    <!-- Eingabebereich -->
-    <div class="chat-input flex p-4 border-t border-gray-200 bg-gray-50">
-        <div class="file-upload-wrapper relative mr-2">
+    <div class="chat-input flex p-4 border-t border-gray-200 bg-gray-50 items-end"> <div class="file-upload-wrapper relative mr-2">
             <input type="file" id="file-input" accept="image/*" class="absolute inset-0 opacity-0 w-full h-full cursor-pointer">
             <button type="button" class="bg-blue-500 text-white p-2 rounded-full shadow-md hover:bg-blue-600 transition" title="Bild hochladen">
                 <span class="material-icons">image</span>
             </button>
         </div>
-        <textarea id="user-input" placeholder="Termininformationen eingeben... (z.B. 'Nächste Woche Dienstag um 14 Uhr Treffen mit Frau Wagner')" 
+        <textarea id="user-input" placeholder="Termininformationen eingeben..." 
                   class="flex-grow p-3 border border-gray-300 rounded-2xl resize-none mr-2 transition-all focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"></textarea>
         <button onclick="sendMessage()" id="send-button"
                 class="bg-indigo-500 text-white w-10 h-10 rounded-full shadow-md hover:bg-indigo-600 transition flex items-center justify-center disabled:opacity-50" disabled>
@@ -136,23 +125,21 @@
     // ******************************************************
     // *** 1. GEMINI KONFIGURATION & STATE ******************
     // ******************************************************
-
-    // ⚠️ HIER WIRD DER API KEY AUTOMATISCH BEREITGESTELLT
-    const GEMINI_API_KEY = ""; 
+    
+    const CHAT_STORAGE_KEY = "canvas_termin_hardcoded_history_v2";
     const GEMINI_MODEL = "gemini-2.5-flash-preview-09-2025"; 
-    const CHAT_STORAGE_KEY = "canvas_termin_advanced_history";
+
+    // API Key wird als leere Zeichenkette definiert, um die automatische
+    // Schlüssel-Verwaltung der Canvas-Plattform zu nutzen.
+    const GEMINI_API_KEY = "";
 
     const chatWindow = document.getElementById('chat-window');
     const userInput = document.getElementById('user-input');
     const fileInput = document.getElementById('file-input');
     const sendButton = document.getElementById('send-button');
     const imagePreviewContainer = document.getElementById('image-preview-container');
-    const imagePreview = document.getElementById('image-preview');
-    const imageFilename = document.getElementById('image-filename');
-    const cancelUpload = document.getElementById('cancel-upload');
     
     let currentImageFile = null;
-    // Die Chat-History speichert nur Text und URLs für die Wiederherstellung, nicht die komplexe JSON-Struktur
     let chatHistory = []; 
 
     // ******************************************************
@@ -163,8 +150,15 @@
         const text = userInput.value.trim();
         // Anpassung der Höhe des Textfelds bei Eingabe
         userInput.style.height = 'auto';
-        userInput.style.height = Math.min(userInput.scrollHeight, 150) + 'px'; // Max 150px
+        // Sicherstellen, dass die Höhe korrekt gesetzt wird
+        const newHeight = Math.min(userInput.scrollHeight, 150);
+        if (newHeight > 40) { // Nur anpassen, wenn es über der Mindesthöhe ist
+            userInput.style.height = newHeight + 'px';
+        } else {
+            userInput.style.height = '40px'; // Oder was auch immer die min-height ist
+        }
         
+        // Deaktiviere Senden, wenn kein Text/Bild vorhanden ist
         sendButton.disabled = (!text && !currentImageFile);
     }
 
@@ -194,38 +188,19 @@
         });
     }
 
-    // Konvertiert Datum/Zeit in das ICS-Format (Floating Time: YYYYMMDDTHHMMSS)
-    function toICSDateTime(date, time) {
-        if (!date || !time) return null;
-        
-        // Verwenden des 'Z' für UTC, um Probleme mit lokalen Zeitzonen zu vermeiden, 
-        // da das KI-Modell die Zeit als lokale Zeit im Format HH:MM liefert.
-        const [year, month, day] = date.split('-');
-        const [hour, minute] = time.split(':');
-        
-        const localDate = new Date(year, month - 1, day, hour, minute);
-        
-        const pad = (num) => num.toString().padStart(2, '0');
-        
-        return localDate.getFullYear() +
-               pad(localDate.getMonth() + 1) +
-               pad(localDate.getDate()) + 'T' +
-               pad(localDate.getHours()) +
-               pad(localDate.getMinutes()) +
-               '00'; 
-    }
-    
-    // Konvertiert Datum/Zeit in das Google Calendar URL-Format (YYYYMMDDTHHMMSS)
-    function formatDateToGoogleCalendar(dateStr, timeStr, offsetHours = 1) {
+    // Konvertiert Datum/Zeit in das Google Calendar URL-Format
+    function formatDateToGoogleCalendar(dateStr, timeStr, offsetMinutes = 60) {
         if (!dateStr || !timeStr) return null;
         
         const [year, month, day] = dateStr.split('-');
         const [hour, minute] = timeStr.split(':');
         
-        // Die Datumsberechnung muss die lokalen Zeitzonen berücksichtigen, um korrekt zu sein
+        // Startzeitpunkt (lokal)
         const startTimeLocal = new Date(year, month - 1, day, hour, minute); 
+        
+        // Endzeitpunkt: Startzeit + offsetMinutes
         const endTimeLocal = new Date(startTimeLocal);
-        endTimeLocal.setHours(startTimeLocal.getHours() + offsetHours);
+        endTimeLocal.setMinutes(startTimeLocal.getMinutes() + offsetMinutes);
         
         const toGoogleFormat = (d) => {
             const pad = (num) => num.toString().padStart(2, '0');
@@ -240,15 +215,15 @@
         const startFormat = toGoogleFormat(startTimeLocal);
         const endFormat = toGoogleFormat(endTimeLocal);
 
-        // Google Kalender erwartet das Format YYYYMMDDTHHMMSS/YYYYMMDDTHHMMSS (z.B. 20251026T190000/20251026T200000)
-        return `${startFormat}/${endFormat}`;
+        // Google Calendar erwartet UTC Zeitstempel ohne Z, aber da wir keinen Zeitzonen-Kontext haben, senden wir es als lokale Zeit.
+        return `${startFormat}/${endFormat}`; 
     }
 
     function generateGoogleCalendarUrl(appointment) {
         const { date, time, purpose, location } = appointment;
         
-        // Wir verwenden die lokale Zeit des Termins
-        const datesParam = formatDateToGoogleCalendar(date, time, 1); 
+        // Standardmäßig 60 Minuten Dauer annehmen
+        const datesParam = formatDateToGoogleCalendar(date, time, 60); 
         
         if (!datesParam) return null;
 
@@ -260,30 +235,71 @@
              url += '&location=' + encodeURIComponent(location);
         }
 
-        // Der Zweck wird als Details gesetzt, da er oft mehr als nur den Titel enthält
-        url += '&details=' + encodeURIComponent(purpose);
+        url += '&details=' + encodeURIComponent(`Termin-Details:\n${purpose}\nOrt: ${location || 'Unbekannt'}`);
         
         return url;
     }
     
+    // Generiert eine einfache ICS-Datei für andere Kalender-Apps
+    function generateICS(appointment) {
+        const { date, time, purpose, location } = appointment;
+        const now = new Date();
+        const uid = Date.now().toString() + "@generator"; // Einfache UID
+        
+        // ICS Zeitformat: YYYYMMDDTHHMMSS
+        const toICSDateTime = (d, t, offsetMinutes = 60) => {
+            if (!d || !t) return null;
+            const [year, month, day] = d.split('-');
+            const [hour, minute] = t.split(':');
+            
+            const startDate = new Date(year, month - 1, day, hour, minute);
+            const endDate = new Date(startDate);
+            endDate.setMinutes(startDate.getMinutes() + offsetMinutes);
+
+            const pad = (num) => num.toString().padStart(2, '0');
+            return {
+                start: startDate.getFullYear() + pad(startDate.getMonth() + 1) + pad(startDate.getDate()) + 'T' + pad(startDate.getHours()) + pad(startDate.getMinutes()) + '00',
+                end: endDate.getFullYear() + pad(endDate.getMonth() + 1) + pad(endDate.getDate()) + 'T' + pad(endDate.getHours()) + pad(endDate.getMinutes()) + '00'
+            };
+        };
+
+        const icsDates = toICSDateTime(date, time, 60); // 60 Minuten Dauer
+        if (!icsDates) return null;
+
+        const icsContent = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'PRODID:-//AI Appointment Generator//DE',
+            'BEGIN:VEVENT',
+            `UID:${uid}`,
+            // DTSTAMP sollte in UTC sein, aber wir verwenden die lokale Zeit ohne Zoneninfo für Einfachheit
+            `DTSTAMP:${toICSDateTime(now.toISOString().slice(0, 10), now.toTimeString().slice(0, 5)).start}`, 
+            `DTSTART:${icsDates.start}`,
+            `DTEND:${icsDates.end}`,
+            `SUMMARY:${purpose}`,
+            location ? `LOCATION:${location}` : '',
+            `DESCRIPTION:Extrahierter Termin: ${purpose} (Ort: ${location || 'Unbekannt'})`,
+            'END:VEVENT',
+            'END:VCALENDAR'
+        ].filter(line => line).join('\n');
+
+        return icsContent;
+    }
+
+
     // ******************************************************
     // *** 3. GEMINI API & JSON HANDHABUNG ******************
     // ******************************************************
 
-    /**
-     * Extrahiert und validiert die komplexe JSON-Struktur aus der KI-Antwort.
-     * @param {string} responseText - Der rohe Text von der KI.
-     * @returns {object|null} - Die strukturierte Antwort oder null bei Fehler.
-     */
     function extractStructuredResponse(responseText) {
-        // Sucht nach dem exakten ```json...``` Block
+        // Sucht nach dem Muster ```json{...}```
         const match = responseText.match(/```json\s*([\s\S]*?)\s*```/m); 
         
         if (match && match[1]) {
             try {
                 let jsonString = match[1].trim(); 
                 
-                // Grundlegende Bereinigung, falls die KI Anführungszeichen doppelt
+                // Ersetzen von häufigen Fehlern des Modells im JSON-String 
                 jsonString = jsonString
                     .replace(/\" oder \"\"/g, '""')
                     .replace(/oder \"\"/g, '""');
@@ -292,26 +308,27 @@
                 
                 // Grundlegende Validierung der Struktur
                 if (structuredResponse.status && structuredResponse.primaryAppointment) {
-                    // Standardwerte setzen
                     const pa = structuredResponse.primaryAppointment;
+                    // Stelle sicher, dass die Felder existieren
                     pa.date = pa.date || "";
                     pa.time = pa.time || "";
                     pa.purpose = pa.purpose || "Termin ohne Details";
-                    pa.location = pa.location || ""; // Neu hinzugefügt
+                    pa.location = pa.location || ""; 
                     
-                    // Maximale 5 Vorschläge anzeigen
+                    // Beschränke Vorschläge auf maximal 5
                     structuredResponse.suggestions = Array.isArray(structuredResponse.suggestions) ? structuredResponse.suggestions.slice(0, 5) : [];
                     
-                    console.log("DEBUG: JSON erfolgreich extrahiert und gültig:", structuredResponse);
+                    // Speichere den Kommentar separat, da der Text manchmal den JSON-Block enthält
+                    structuredResponse.comment = structuredResponse.comment || responseText.split(match[0])[0].trim();
+                    
                     return structuredResponse;
                 }
                 
             } catch (e) {
-                console.error("FEHLER: JSON-Parsing fehlgeschlagen. Ungültige Struktur im Block. Details:", e, "Block:", match[1]);
+                console.error("FEHLER: JSON-Parsing fehlgeschlagen. Details:", e, "Block:", match[1]);
             }
         }
-        console.error("FEHLER: JSON-Block (```json{...}```) nicht in der KI-Antwort gefunden.");
-        return null;
+        return null; // Gibt null zurück, wenn kein gültiges JSON gefunden wird
     }
 
     async function getGeminiResponse(text, imageFile) {
@@ -321,20 +338,27 @@
         let contents = [];
         const dateContext = getCurrentDateContext();
 
-        // Füge die bereinigte Chat-Historie für den Kontext hinzu
+        // Füge den Chatverlauf hinzu (historische Konversation)
         chatHistory.forEach(msg => {
             const role = msg.sender === 'model' ? 'model' : 'user'; 
             let textToSend = msg.text;
             
-            // Entferne den JSON-Block aus dem Modell-Kontext, um Tokens zu sparen
+            // Bereinige den Text, falls es sich um eine frühere KI-Antwort handelt, die JSON enthielt
+            // Wichtig: Wir senden nur den relevanten Text zurück, um das Prompt-Limit zu schonen
             if (role === 'model') {
+                 // Entferne den JSON-Block aus früheren Modellantworten
                 const jsonMatch = msg.text.match(/```json\s*(\{[\s\S]*?\})\s*```/m);
                 if (jsonMatch) {
-                    textToSend = msg.text.replace(jsonMatch[0], '').trim();
+                    // Verwende den gespeicherten Kommentar, falls vorhanden, sonst den Text vor dem JSON
+                    textToSend = msg.structuredResponse?.comment || msg.text.split(jsonMatch[0])[0].trim() || "Termin-Detektiv Antwort";
                 }
             }
+
             if (textToSend) {
-                contents.push({ role: role, parts: [{ text: textToSend }] });
+                let parts = [{ text: textToSend }];
+                // Hinzufügen von Bild-Metadaten zur History ist komplex und wird weggelassen,
+                // um die Komplexität und die Token-Limits zu reduzieren.
+                contents.push({ role: role, parts: parts });
             }
         });
 
@@ -349,9 +373,9 @@
                 **Antwort-Regeln (EXTREM STRIKT EINHALTEN):**
                 1. Die Antwort MUSS IMMER mit einem kurzen, einleitenden/erklärenden Satz beginnen (Feld "comment").
                 2. UNMITTELBAR, in der **nächsten Zeile** nach diesem Satz, MUSS der JSON-Code-Block folgen. Dieser Block MUSS mit \`\`\`json beginnen und mit \`\`\` enden.
-                3. **JSON-STATUS:** Setze "status" auf "ok", wenn Datum, Zeit und Zweck klar sind. Setze ihn auf **"needs_clarification"**, wenn Datum, Zeit oder Zweck **unklar oder mehrdeutig** sind (z.B. "nächsten Freitag").
+                3. **JSON-STATUS:** Setze "status" auf "ok", wenn Datum, Zeit und Zweck klar sind. Setze ihn auf **"needs_clarification"** wenn Datum, Zeit oder Zweck **unklar oder mehrdeutig** sind (z.B. "nächsten Freitag").
                 
-                **ZUSÄTZLICHE REGEL (TIPPFEHLER):** Wenn Sie einen wahrscheinlichen Tippfehler bei einem Namen, einer Entität oder einem Ort feststellen (z.B. 'Doktor Werbere' statt 'Doktor Weber' oder 'Berlinr' statt 'Berlin'), setzen Sie den Status auf **"needs_clarification"** und bieten Sie entsprechende Korrekturvorschläge im 'suggestions'-Array an. Nutzen Sie hierfür den Typ 'purpose_fix' (für Namen/Zweck) oder 'location_fix' (für Orte).
+                **ZUSÄTZLICHE REGEL (TIPPFEHLER):** Wenn Sie einen wahrscheinlichen Tippfehler bei einem Namen, einer Entität oder einem Ort feststellen, setzen Sie den Status auf **"needs_clarification"** und bieten Sie entsprechende Korrekturvorschläge im 'suggestions'-Array an. Nutzen Sie hierfür den Typ 'purpose_fix' oder 'location_fix'.
 
                 4. **FEHLENDE DATEN:** Setze fehlende Daten (date, time, purpose, location) auf die **leere Zeichenkette ("")**.
                 5. **VORSCHLÄGE:** Wenn der Status "needs_clarification" ist, fülle das **"suggestions"**-Array mit 3 bis 5 präzisen Text-Vorschlägen zur Korrektur oder Klärung, sowie einem "Manuelle Eingabe"-Button.
@@ -377,6 +401,7 @@
             }]
         };
         
+        // Füge die aktuelle Nutzereingabe (Text und/oder Bild) hinzu
         let userParts = [];
         if (imageFile) {
             userParts.push(await fileToGenerativePart(imageFile));
@@ -393,11 +418,11 @@
             tools: [{ "google_search": {} }] 
         };
 
-        // Implementiere Exponential Backoff für Robustheit
         let responseData = null;
         const maxRetries = 3;
         const baseDelay = 1000;
 
+        // Exponential Backoff für Fehlertoleranz bei API-Aufrufen
         for (let attempt = 0; attempt < maxRetries; attempt++) {
             try {
                 const response = await fetch(url, {
@@ -427,7 +452,6 @@
             }
         }
         
-        // KORRIGIERTER BEREICH: Alle Textteile der Antwort zusammenführen
         const candidateParts = responseData?.candidates?.[0]?.content?.parts;
         let fullResponseText = "";
 
@@ -438,7 +462,6 @@
                 }
             }
         }
-        // ENDE KORRIGIERTER BEREICH
 
         if (fullResponseText) {
             return fullResponseText;
@@ -453,34 +476,29 @@
     // *** 4. CHAT DISPLAY & RENDERING **********************
     // ******************************************************
     
-    /**
-     * Behandelt einen Korrekturvorschlag.
-     * @param {string} type - Der Typ der Korrektur (z.B. 'manual' oder 'date_fix').
-     * @param {string} text - Der Text des Korrekturvorschlags.
-     */
     function handleCorrection(type, text) {
         let correctionPrompt;
         
-        // Die Logik für Korrektur-Buttons und die manuelle Eingabe
         if (type === 'manual') {
-            // Bei manueller Eingabe: Setze den Platzhalter-Text in die Eingabezeile
-            // Der Benutzer kann den Text dann anpassen und erneut senden.
-            correctionPrompt = `Korrektur: Ich möchte die Termin-Details manuell ändern. Bitte fülle oder korrigiere die Details mit diesen Informationen: ${text}`;
+            // Bei manueller Eingabe den Originaltext des letzten User-Prompts wiederherstellen
+            const lastUserMsg = chatHistory.findLast(msg => msg.sender === 'user');
+            correctionPrompt = lastUserMsg ? lastUserMsg.text : ""; 
+
             userInput.value = correctionPrompt;
             userInput.focus();
             toggleSendButton();
         } else {
-            // Bei einem Vorschlag: Sende den Korrekturtext direkt an die KI
+            // Bei Korrekturvorschlag wird ein neuer Prompt an die KI gesendet
             correctionPrompt = `Bitte verwende diesen Vorschlag zur Korrektur des letzten Termins: ${text}`;
-            userInput.value = correctionPrompt; // Setze den Wert kurz, um ihn zu senden
+            userInput.value = correctionPrompt; 
             sendMessage(); 
         }
     }
 
-    /**
-     * Erstellt ein HTML-Element für eine Chat-Nachricht, inkl. Termin-UI.
-     */
-    function createMessageElement(messageContent, sender, imageUrl, structuredResponse) {
+    // Erstellt das HTML für eine einzelne Nachricht im Live-Chat
+    function createMessageElement(messageData) {
+        const { text, sender, imageUrl, structuredResponse } = messageData;
+        
         const row = document.createElement('div');
         row.classList.add('message-row', sender === 'user' ? 'user-message-row' : 'bot-message-row');
 
@@ -495,36 +513,39 @@
             msgDiv.appendChild(img);
         }
 
-        let htmlContent = messageContent.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').trim();
-        const jsonMatch = htmlContent.match(/```json\s*(\{[\s\S]*?\})\s*```/m);
-        let cleanedHtmlContent = htmlContent;
-        let uiHtml = ''; 
+        let htmlContent = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>').trim();
         let appointment = null;
-        let correctionButtonsContainer = null;
+        let comment = htmlContent;
 
-        // 1. JSON-Block aus dem Text entfernen
-        if (jsonMatch) {
-            cleanedHtmlContent = htmlContent.replace(jsonMatch[0], '').trim();
+        // 1. JSON-Block aus dem Text entfernen und Kommentar extrahieren
+        if (structuredResponse) {
+            appointment = structuredResponse.primaryAppointment;
+            // Verwende den explizit extrahierten Kommentar
+            comment = structuredResponse.comment.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+        } else {
+             // Fallback für einfache Textantworten (z.B. API-Fehler)
+             const jsonMatch = htmlContent.match(/```json\s*([\s\S]*?)\s*```/m);
+             if (jsonMatch) {
+                // Nur den Text vor dem JSON-Block anzeigen
+                comment = htmlContent.split(jsonMatch[0])[0].trim();
+             }
         }
         
-        // Füge den Einleitungssatz/Kommentar ein (entweder aus dem JSON oder als Fallback)
-        const comment = structuredResponse?.comment || cleanedHtmlContent.split('\n')[0].trim();
         const textNode = document.createElement('p');
-        textNode.innerHTML = comment.replace(/\n/g, '<br>');
+        textNode.innerHTML = comment;
         msgDiv.appendChild(textNode);
         
-        // 2. Termin-Zusammenfassung und Buttons erstellen
-        if (structuredResponse && structuredResponse.primaryAppointment) {
-            appointment = structuredResponse.primaryAppointment;
+        // 2. Termin-Zusammenfassung und Buttons erstellen (nur für Bot-Nachrichten mit Struktur)
+        if (sender === 'model' && appointment) {
             const isClarificationNeeded = structuredResponse.status === 'needs_clarification';
             const hasDateTime = appointment.date && appointment.time;
             
             const dateDisplay = appointment.date || '<span class="text-red-500 font-medium">Datum fehlt</span>';
             const timeDisplay = appointment.time || '<span class="text-red-500 font-medium">Zeit fehlt</span>';
             const purposeDisplay = appointment.purpose || '<span class="text-red-500 font-medium">Zweck fehlt</span>';
-            const locationDisplay = appointment.location || '<span class="text-gray-400">Ort optional</span>';
+            const locationDisplay = appointment.location || '<span class="text-gray-400">Ort fehlt/optional</span>';
             
-            uiHtml = `
+            const uiHtml = `
                 <div class="appointment-summary ${isClarificationNeeded ? 'bg-yellow-50 text-yellow-800 border-yellow-200' : 'bg-green-50 text-green-800 border-green-200'} p-3 mt-3 mb-2 rounded-lg border">
                     <p class="font-bold mb-1 border-b pb-1 ${isClarificationNeeded ? 'border-yellow-200' : 'border-green-200'}">
                         ${isClarificationNeeded ? '⚠️ Korrektur nötig' : '✅ Termin extrahiert'}
@@ -537,11 +558,12 @@
                     </ul>
                 </div>
             `;
-            msgDiv.innerHTML += uiHtml;
+            // Sicherstellen, dass der Text vor dem Anhängen des UI-HTML am Ende steht
+            msgDiv.innerHTML = msgDiv.innerHTML + uiHtml; 
             
-            // 3. Korrektur-Buttons hinzufügen, falls nötig (Ihre Anforderung)
+            // 3. Korrektur-Buttons hinzufügen
             if (isClarificationNeeded && structuredResponse.suggestions.length > 0) {
-                correctionButtonsContainer = document.createElement('div');
+                const correctionButtonsContainer = document.createElement('div');
                 correctionButtonsContainer.classList.add('flex', 'flex-wrap', 'gap-2', 'mt-3', 'p-2', 'bg-gray-100', 'rounded-lg', 'border', 'border-gray-200');
                 
                 structuredResponse.suggestions.forEach(s => {
@@ -554,309 +576,431 @@
                         case 'time_fix': icon = 'schedule'; break;
                         case 'purpose_fix': icon = 'label'; break;
                         case 'location_fix': icon = 'place'; break;
-                        case 'manual': icon = 'keyboard'; btn.classList.add('bg-indigo-100', 'border-indigo-400', 'text-indigo-800'); break; // Eigene Lösung
+                        case 'manual': icon = 'keyboard'; btn.classList.add('bg-indigo-100', 'border-indigo-400', 'text-indigo-800'); break;
                         default: icon = 'help_outline';
                     }
                     
                     btn.innerHTML = `<span class="material-icons text-base mr-1">${icon}</span> ${s.text}`;
                     
-                    // Klickt das Kommando in die handleCorrection-Funktion
-                    btn.onclick = () => handleCorrection(s.type, s.text === 'Manuelle Eingabe' ? messageContent : s.text);
+                    // Bei Klick handleCorrection aufrufen
+                    btn.onclick = () => handleCorrection(s.type, s.text === 'Manuelle Eingabe' ? text : s.text);
                     correctionButtonsContainer.appendChild(btn);
                 });
                 msgDiv.appendChild(correctionButtonsContainer);
             }
 
-            // 4. Kalender-Aktions-Buttons hinzufügen, falls status 'ok' ist und Datum/Zeit vorhanden sind
+            // 4. Kalender-Aktions-Buttons hinzufügen
             if (!isClarificationNeeded && hasDateTime) {
                 const actionContainer = document.createElement('div');
                 actionContainer.classList.add('flex', 'flex-wrap', 'gap-2', 'mt-3', 'pt-2', 'border-t', 'border-gray-200');
                 
-                // Google Kalender Button
+                // Google Calendar Link Button
                 const gcalUrl = generateGoogleCalendarUrl(appointment);
-                if (gcalUrl) {
-                    const gcalBtn = document.createElement('a');
-                    gcalBtn.href = gcalUrl;
-                    gcalBtn.target = "_blank";
-                    gcalBtn.classList.add('action-button', 'bg-red-500', 'text-white', 'py-2', 'px-4', 'rounded-full', 'text-sm', 'hover:bg-red-600', 'flex', 'items-center', 'justify-center');
-                    gcalBtn.innerHTML = '<span class="material-icons text-base mr-1">event</span> In Google Kalender speichern';
-                    actionContainer.appendChild(gcalBtn);
-                }
+                const gcalBtn = document.createElement('a');
+                gcalBtn.href = gcalUrl;
+                gcalBtn.target = '_blank';
+                gcalBtn.classList.add('action-button', 'bg-blue-500', 'text-white', 'py-2', 'px-4', 'rounded-full', 'hover:bg-blue-600', 'transition', 'text-sm', 'flex', 'items-center');
+                gcalBtn.innerHTML = '<span class="material-icons text-lg mr-1">event</span> In Google Kalender';
+                actionContainer.appendChild(gcalBtn);
 
                 // ICS Download Button
                 const icsBtn = document.createElement('button');
-                icsBtn.classList.add('action-button', 'bg-gray-600', 'text-white', 'py-2', 'px-4', 'rounded-full', 'text-sm', 'hover:bg-gray-700', 'flex', 'items-center', 'justify-center');
-                icsBtn.innerHTML = '<span class="material-icons text-base mr-1">file_download</span> Termin (.ics) herunterladen';
-                icsBtn.onclick = () => downloadAppointment(appointment);
+                icsBtn.classList.add('action-button', 'bg-gray-200', 'text-gray-800', 'py-2', 'px-4', 'rounded-full', 'hover:bg-gray-300', 'transition', 'text-sm', 'flex', 'items-center');
+                icsBtn.innerHTML = '<span class="material-icons text-lg mr-1">file_download</span> ICS herunterladen';
+                icsBtn.onclick = () => downloadICS(appointment);
                 actionContainer.appendChild(icsBtn);
-                
+
+                // Text Kopieren Button
+                const copyTextBtn = document.createElement('button');
+                copyTextBtn.classList.add('action-button', 'bg-gray-200', 'text-gray-800', 'py-2', 'px-4', 'rounded-full', 'hover:bg-gray-300', 'transition', 'text-sm', 'flex', 'items-center');
+                copyTextBtn.innerHTML = '<span class="material-icons text-lg mr-1">content_copy</span> Text kopieren';
+                copyTextBtn.onclick = () => copyAppointmentText(appointment, copyTextBtn);
+                actionContainer.appendChild(copyTextBtn);
+
                 msgDiv.appendChild(actionContainer);
-            } else if (!isClarificationNeeded && !hasDateTime) {
-                 // Info, dass Kalenderaktionen fehlen, obwohl status "ok" ist (nur wenn Datum/Zeit fehlen)
-                 const info = document.createElement('p');
-                 info.classList.add('text-xs', 'text-red-600', 'mt-3', 'p-1', 'border', 'border-red-200', 'rounded-md', 'bg-red-50');
-                 info.textContent = '❌ Datum und/oder Uhrzeit fehlen. Kalender-Aktionen sind deaktiviert.';
-                 msgDiv.appendChild(info);
             }
         }
-        // Füge den restlichen Text hinzu (falls vorhanden)
-        const remainingText = cleanedHtmlContent.substring(comment.length).trim();
-        if (remainingText) {
-             const subTextNode = document.createElement('p');
-             subTextNode.classList.add('text-sm', 'mt-2', 'text-gray-700');
-             subTextNode.innerHTML = remainingText.replace(/\n/g, '<br>');
-             msgDiv.appendChild(subTextNode);
-        }
+
 
         row.appendChild(msgDiv);
-        chatWindow.appendChild(row);
-        chatWindow.scrollTop = chatWindow.scrollHeight;
-    }
-
-    function createLoadingElement() {
-        const row = document.createElement('div');
-        row.id = 'loading-row';
-        row.classList.add('message-row', 'bot-message-row');
-        const msgDiv = document.createElement('div');
-        msgDiv.classList.add('message', 'bot-message', 'shadow-sm');
-        const loadingText = document.createElement('div');
-        loadingText.classList.add('flex', 'items-center');
-        loadingText.innerHTML = 'AI analysiert <span class="ml-2 loading-dot"></span><span class="loading-dot"></span><span class="loading-dot"></span>';
-        msgDiv.appendChild(loadingText);
-        row.appendChild(msgDiv);
-        chatWindow.appendChild(row);
-        chatWindow.scrollTop = chatWindow.scrollHeight;
         return row;
     }
 
+    // Funktion zum Kopieren des Termin-Textes in die Zwischenablage
+    function copyAppointmentText(appointment, button) {
+        const textToCopy = `Termin-Zusammenfassung:\nZweck: ${appointment.purpose}\nDatum: ${appointment.date}\nUhrzeit: ${appointment.time}\nOrt: ${appointment.location || 'Unbekannt'}`;
+        
+        const originalText = button.innerHTML;
+        const originalBg = button.classList.contains('bg-gray-200') ? 'bg-gray-200' : 'bg-green-500';
+        
+        try {
+            navigator.clipboard.writeText(textToCopy).then(() => {
+                button.innerHTML = '<span class="material-icons text-lg mr-1">done</span> Kopiert!';
+                button.classList.remove(originalBg, 'bg-gray-200', 'hover:bg-gray-300');
+                button.classList.add('bg-green-500', 'text-white', 'hover:bg-green-600');
+                setTimeout(() => {
+                    button.innerHTML = originalText;
+                    button.classList.remove('bg-green-500', 'text-white', 'hover:bg-green-600');
+                    button.classList.add(originalBg, 'hover:bg-gray-300');
+                }, 2000);
+            }).catch(() => {
+                fallbackCopyTextToClipboard(textToCopy, button, originalText, originalBg);
+            });
+        } catch (err) {
+            fallbackCopyTextToClipboard(textToCopy, button, originalText, originalBg);
+        }
+    }
+
+    function fallbackCopyTextToClipboard(textToCopy, button, originalText, originalBg) {
+        const textArea = document.createElement("textarea");
+        textArea.value = textToCopy;
+        textArea.style.position = "fixed"; 
+        textArea.style.left = "-9999px"; 
+        textArea.style.top = "-9999px";
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        
+        try {
+            const successful = document.execCommand('copy');
+            if (successful) {
+                button.innerHTML = '<span class="material-icons text-lg mr-1">done</span> Kopiert!';
+                button.classList.remove(originalBg, 'bg-gray-200', 'hover:bg-gray-300');
+                button.classList.add('bg-green-500', 'text-white', 'hover:bg-green-600');
+                setTimeout(() => {
+                    button.innerHTML = originalText;
+                    button.classList.remove('bg-green-500', 'text-white', 'hover:bg-green-600');
+                    button.classList.add(originalBg, 'hover:bg-gray-300');
+                }, 2000);
+            }
+        } catch (err) {
+            console.error('Kopieren fehlgeschlagen:', err);
+        }
+        document.body.removeChild(textArea);
+    }
+
+    // Funktion zum Herunterladen der ICS-Datei
+    function downloadICS(appointment) {
+        const icsContent = generateICS(appointment);
+        if (!icsContent) return;
+
+        const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        
+        // Dateiname basierend auf Zweck und Datum
+        const fileName = (appointment.purpose || 'Termin').replace(/\s/g, '_').substring(0, 30).replace(/[^a-zA-Z0-9_]/g, '');
+        link.download = `${fileName}_${appointment.date || 'unknown'}.ics`;
+        
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+    
+    function addMessageToChat(text, sender, imageUrl, structuredResponse = null) {
+        // Bereinige den Text von einem eventuell vorhandenen JSON-Block, bevor er gespeichert wird,
+        // um die Chat-History sauber zu halten (der JSON-Block wird über structuredResponse gespeichert).
+        let cleanText = text;
+        if (structuredResponse) {
+             const jsonMatch = text.match(/```json\s*([\s\S]*?)\s*```/m);
+             if (jsonMatch) {
+                // Nur den Text vor dem JSON-Block als Haupttext speichern, falls er den Kommentar enthält
+                cleanText = text.split(jsonMatch[0])[0].trim() || structuredResponse.comment;
+             }
+        }
+
+        const messageData = { text: cleanText, sender, imageUrl, structuredResponse };
+        const msgElement = createMessageElement(messageData);
+        chatWindow.appendChild(msgElement);
+        
+        // Speichere die Nachricht im Verlauf
+        chatHistory.push(messageData);
+        
+        saveChatHistory();
+        chatWindow.scrollTop = chatWindow.scrollHeight;
+    }
+
+    function showLoading() {
+        const loadingDiv = document.createElement('div');
+        loadingDiv.id = 'loading-indicator';
+        loadingDiv.classList.add('message-row', 'bot-message-row');
+        
+        const msgDiv = document.createElement('div');
+        // Wichtig: 'bot-message' Klasse hinzufügen
+        msgDiv.classList.add('message', 'bot-message'); 
+        msgDiv.innerHTML = `
+            <div class="loading-content">
+                <span class="loading-dot"></span>
+                <span class="loading-dot"></span>
+                <span class="loading-dot"></span>
+            </div>
+        `;
+        
+        loadingDiv.appendChild(msgDiv);
+        chatWindow.appendChild(loadingDiv);
+        chatWindow.scrollTop = chatWindow.scrollHeight;
+    }
+
+    function hideLoading() {
+        const loadingDiv = document.getElementById('loading-indicator');
+        if (loadingDiv) {
+            loadingDiv.remove();
+        }
+    }
+
+
     // ******************************************************
-    // *** 5. SEND FUNKTION *********************************
+    // *** 5. HAUPT-LOGIK & EREIGNISSE **********************
     // ******************************************************
 
     async function sendMessage() {
         const text = userInput.value.trim();
-        const image = currentImageFile;
+        const imageFile = currentImageFile;
 
-        if (!text && !image) return;
+        if (!text && !imageFile) return;
         
-        sendButton.disabled = true;
-        userInput.disabled = true;
-
-        const userImageUrl = image ? URL.createObjectURL(image) : null;
-        
-        // Führe die Nachricht als HTML-Element hinzu
-        createMessageElement(text, 'user', userImageUrl, null);
-        const loadingMessage = createLoadingElement();
-        
-        // Füge die Nachricht zur History hinzu
-        chatHistory.push({ sender: 'user', text: text, imageUrl: userImageUrl });
-
-        // Zurücksetzen des Eingabebereichs
+        // 1. Nutzernachricht anzeigen und Eingabe leeren
         userInput.value = '';
+        // Höhe zurücksetzen, bevor der Button toggelt (wichtig für das Layout)
         userInput.style.height = '40px'; 
-        toggleSendButton();
-        resetImageUpload();
+        toggleSendButton(); 
+        const userImageUrl = imageFile ? URL.createObjectURL(imageFile) : null;
+        // Speichere den Originaltext für eventuelle "Manuelle Eingabe"
+        addMessageToChat(text, 'user', userImageUrl); 
         
-        try {
-            const geminiResponseText = await getGeminiResponse(text, image);
-            const structuredResponse = extractStructuredResponse(geminiResponseText);
-            
-            loadingMessage.remove();
+        // 2. Bild-Vorschau zurücksetzen
+        resetImageUpload();
 
-            if (!structuredResponse) {
-                 // Fallback bei fehlendem/ungültigem JSON
-                 let errorMsg = geminiResponseText;
-                 if (!geminiResponseText.includes("FEHLER")) {
-                    errorMsg = "Die KI hat geantwortet, aber die erwartete JSON-Struktur konnte nicht gefunden werden. Dies wurde jetzt mit der Korrektur der `getGeminiResponse` Funktion behoben, sollte aber als Fallback dienen." + "\n\n" + errorMsg;
-                 }
-                createMessageElement(errorMsg, 'bot', null, null);
-            } else {
-                // Erfolgreiche Antwort mit strukturierter UI
-                createMessageElement(geminiResponseText, 'bot', null, structuredResponse);
-            }
-            
-            // Füge die Antwort des Models zur History hinzu (inkl. JSON-Block für Debug und Re-Parsing beim Laden)
-            chatHistory.push({ sender: 'model', text: geminiResponseText });
-            
-            saveChatHistory();
-            
-        } catch (error) {
-            console.error("Fehler im Hauptprozess:", error);
-            document.getElementById('loading-row')?.remove();
-            createMessageElement("Ein unerwarteter Fehler ist aufgetreten. Bitte versuchen Sie es erneut.", 'bot', null, null);
-        } finally {
-            userInput.disabled = false;
-            toggleSendButton();
-            userInput.focus();
-        }
+        // 3. Ladeanzeige anzeigen
+        showLoading();
+
+        // 4. KI-Antwort abrufen
+        const responseText = await getGeminiResponse(text, imageFile);
+        
+        // 5. Ladeanzeige ausblenden
+        hideLoading();
+        
+        // 6. Antwort verarbeiten und anzeigen
+        const structuredResponse = extractStructuredResponse(responseText);
+
+        // Wir übergeben den vollen responseText (inkl. JSON-Block) an addMessageToChat,
+        // damit es geparst und der Text vor dem JSON-Block als Kommentar verwendet werden kann.
+        addMessageToChat(responseText, 'model', null, structuredResponse);
     }
-
-
-    // ******************************************************
-    // *** 6. FILE HANDHABUNG & HISTORY *********************
-    // ******************************************************
-
+    
     function resetImageUpload() {
         currentImageFile = null;
         fileInput.value = '';
         imagePreviewContainer.classList.add('hidden');
-        imagePreview.src = '';
-        imageFilename.textContent = '';
-        toggleSendButton();
     }
+
+    // --- Chat-Verlauf Speichern/Laden/Löschen ---
     
-    // Events für das Hochladen
-    fileInput.addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            currentImageFile = file;
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                imagePreview.src = e.target.result;
-                imageFilename.textContent = file.name;
-                imagePreviewContainer.classList.remove('hidden');
-                toggleSendButton();
-            };
-            reader.readAsDataURL(file);
-        } else {
-            resetImageUpload();
-        }
-    });
-
-    cancelUpload.addEventListener('click', resetImageUpload);
-    userInput.addEventListener('input', toggleSendButton);
-    userInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey && !sendButton.disabled) {
-            e.preventDefault();
-            sendMessage();
-        }
-    });
-
     function saveChatHistory() {
-        sessionStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(chatHistory));
+        // Speichere nur die notwendigen Daten, nicht die temporären Blob-URLs
+        const serializableHistory = chatHistory.map(msg => ({
+            text: msg.text, // Hier ist jetzt der saubere Text ohne JSON
+            sender: msg.sender,
+            // Speichern des ImageUrl ist nur für den aktuellen Session-Export sinnvoll,
+            // da Blob-URLs nicht über Sessions hinweg funktionieren.
+            // Für die Robustheit beim Laden wird imageUrl hier weggelassen oder auf null gesetzt,
+            // da die Base64-Daten nicht in localStorage gespeichert werden sollten.
+            imageUrl: null, 
+            structuredResponse: msg.structuredResponse
+        }));
+        localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(serializableHistory));
     }
 
     function loadChatHistory() {
-        const storedHistory = sessionStorage.getItem(CHAT_STORAGE_KEY);
-        if (storedHistory) {
-            chatHistory = JSON.parse(storedHistory);
-            
-            // Entferne die initiale Willkommensnachricht
-            const initialMessage = document.querySelector('#chat-window > .message-row.bot-message-row:first-child');
-            if(initialMessage) initialMessage.remove(); 
-            
+        const savedHistory = localStorage.getItem(CHAT_STORAGE_KEY);
+        if (savedHistory) {
+            chatHistory = JSON.parse(savedHistory);
             chatHistory.forEach(msg => {
-                // Beim Laden MUSS die Struktur neu extrahiert werden, da nur der Text gespeichert wurde
-                const structuredResponse = extractStructuredResponse(msg.text); 
-                const imageUrl = msg.imageUrl || null;
-                
-                createMessageElement(msg.text, msg.sender, imageUrl, structuredResponse); 
+                // Beim Laden müssen wir das createMessageElement mit den gespeicherten Daten verwenden
+                // Falls structuredResponse vorhanden ist, wird der Text automatisch repariert
+                const msgElement = createMessageElement(msg); 
+                chatWindow.appendChild(msgElement);
             });
+            chatWindow.scrollTop = chatWindow.scrollHeight; // Beim Laden nach unten scrollen
         }
-        toggleSendButton();
     }
 
+    function deleteChatConfirmation() {
+        // Da wir kein confirm() verwenden dürfen, simulieren wir eine Bestätigungs-Modal
+        const modal = document.createElement('div');
+        modal.classList.add('fixed', 'inset-0', 'bg-gray-900', 'bg-opacity-75', 'flex', 'items-center', 'justify-center', 'z-50');
+        modal.innerHTML = `
+            <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-sm">
+                <h3 class="text-xl font-bold mb-3 text-red-600">Chatverlauf löschen?</h3>
+                <p class="mb-4 text-gray-700">Sind Sie sicher, dass Sie den gesamten Chatverlauf unwiderruflich löschen möchten?</p>
+                <div class="flex justify-end space-x-3">
+                    <button id="cancel-delete" class="bg-gray-200 text-gray-700 py-2 px-4 rounded-full hover:bg-gray-300 transition">Abbrechen</button>
+                    <button id="confirm-delete" class="bg-red-500 text-white py-2 px-4 rounded-full hover:bg-red-600 transition">Ja, löschen</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+
+        document.getElementById('cancel-delete').onclick = () => modal.remove();
+        document.getElementById('confirm-delete').onclick = () => {
+            modal.remove();
+            localStorage.removeItem(CHAT_STORAGE_KEY);
+            chatHistory = [];
+            chatWindow.innerHTML = '';
+            initializeChat(); // Starte den Chat neu mit der Willkommensnachricht
+        };
+    }
+    
+    // *** NEUE UND KORRIGIERTE DOWNLOAD-FUNKTION ***
+    // Baut den HTML-Export basierend auf dem sauberen chatHistory-Array neu auf.
     function downloadChat() {
-        const chatContent = chatWindow.innerHTML;
-        const htmlTemplate = `
+        let exportContent = '';
+        
+        chatHistory.forEach(msg => {
+            // Text säubern (Markdown-Fettungen beibehalten)
+            let cleanedText = msg.text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+            
+            let htmlBody = `<p>${cleanedText.replace(/\n/g, '<br>')}</p>`;
+
+            // Wenn strukturiert, verwende den sauberen Kommentar und die Termin-Zusammenfassung
+            if (msg.structuredResponse) {
+                const appt = msg.structuredResponse.primaryAppointment;
+                const isClarificationNeeded = msg.structuredResponse.status === 'needs_clarification';
+                
+                // Verwende den gespeicherten Kommentar
+                const comment = msg.structuredResponse.comment.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                
+                const statusClass = isClarificationNeeded ? 'bg-yellow-50 text-yellow-800 border-yellow-200' : 'bg-green-50 text-green-800 border-green-200';
+                const statusText = isClarificationNeeded ? '⚠️ Korrektur nötig' : '✅ Termin extrahiert';
+
+                htmlBody = `
+                    <p>${comment}</p>
+                    <div class="appointment-summary ${statusClass}">
+                        <p class="font-bold mb-1 border-b pb-1 ${isClarificationNeeded ? 'border-yellow-200' : 'border-green-200'}">
+                            ${statusText}
+                        </p>
+                        <ul class="list-none text-sm space-y-1 mt-2">
+                            <li><span class="font-semibold w-20 inline-block">Zweck:</span> ${appt.purpose || 'Fehlt'}</li>
+                            <li><span class="font-semibold w-20 inline-block">Datum:</span> ${appt.date || 'Fehlt'}</li>
+                            <li><span class="font-semibold w-20 inline-block">Uhrzeit:</span> ${appt.time || 'Fehlt'}</li>
+                            <li><span class="font-semibold w-20 inline-block">Ort:</span> ${appt.location || 'Fehlt'}</li>
+                        </ul>
+                    </div>
+                `;
+            }
+
+
+            const imageHtml = msg.imageUrl ? `<img src="${msg.imageUrl}" alt="Bild" class="max-w-full h-auto rounded mb-2">` : '';
+
+            exportContent += `
+                <div class="message-row ${msg.sender === 'user' ? 'user-message-row' : 'bot-message-row'}">
+                    <div class="message ${msg.sender === 'user' ? 'user-message' : 'bot-message'} shadow-sm">
+                        ${imageHtml}
+                        ${htmlBody}
+                    </div>
+                </div>
+            `;
+        });
+
+        const fullHtml = `
             <!DOCTYPE html>
             <html lang="de">
             <head>
                 <meta charset="UTF-8">
-                <title>Chat-Export</title>
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>Exportierter Chat - AI Termin-Detektiv</title>
+                <script src="https://cdn.tailwindcss.com"></script>
                 <style>
-                    body { font-family: sans-serif; background-color: #f0f2f5; padding: 20px; }
-                    .chat-header { background-color: #4CAF50; color: white; padding: 15px; border-radius: 8px 8px 0 0; }
-                    .message-row { display: flex; margin-bottom: 10px; }
+                    body { font-family: sans-serif; background-color: #f3f4f6; padding: 20px; }
+                    .chat-window { max-width: 800px; margin: 0 auto; background-color: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+                    .message-row { display: flex; margin-bottom: 0.75rem; }
                     .user-message-row { justify-content: flex-end; }
                     .bot-message-row { justify-content: flex-start; }
-                    .message { padding: 10px 15px; border-radius: 18px; max-width: 60%; line-height: 1.4; word-wrap: break-word; }
-                    .user-message { background-color: #dcf8c6; margin-left: auto; }
-                    .bot-message { background-color: white; border: 1px solid #E5E7EB; }
-                    .message img { max-width: 100%; height: auto; border-radius: 10px; margin-top: 5px; }
-                    /* Verstecke interaktive Elemente beim Export */
-                    .action-button, .correction-button { display: none !important; } 
+                    .message { padding: 0.75rem 1rem; border-radius: 1.5rem; max-width: 80%; line-height: 1.4; word-wrap: break-word; font-size: 0.95rem; } 
+                    .user-message { background-color: #DCF8C6; margin-left: auto; border-bottom-right-radius: 4px; }
+                    .bot-message { background-color: #F9FAFB; border: 1px solid #E5E7EB; border-bottom-left-radius: 4px; box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05); }
+                    .appointment-summary { padding: 0.75rem; margin-top: 0.75rem; border-radius: 0.5rem; border: 1px solid; }
+                    /* Tailwind Farbcodes zur Stilsicherheit kopiert */
+                    .bg-green-50 { background-color: #F0FDF4; }
+                    .text-green-800 { color: #065F46; }
+                    .border-green-200 { border-color: #A7F3D0; }
+                    .bg-yellow-50 { background-color: #FFFBEB; }
+                    .text-yellow-800 { color: #92400E; }
+                    .border-yellow-200 { border-color: #FDE68A; }
+                    .message img { max-width: 100%; height: auto; border-radius: 8px; margin-top: 5px; cursor: pointer; }
                 </style>
             </head>
             <body>
-                <div class="chat-header"><h1>Export des AI Termin-Chats</h1></div>
-                <div id="exported-chat-window" style="background: white; padding: 20px; border-radius: 0 0 8px 8px;">
-                    ${chatContent}
+                <div class="chat-window">
+                    <h1 class="text-2xl font-bold mb-4 text-indigo-600">Exportierter Chatverlauf - AI Termin-Detektiv</h1>
+                    <p class="text-sm text-gray-500 mb-4">Exportiert am: ${new Date().toLocaleString('de-DE')}</p>
+                    ${exportContent}
                 </div>
             </body>
             </html>
         `;
-
-        const blob = new Blob([htmlTemplate], { type: 'text/html' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `termin_chat_export_${new Date().toISOString().slice(0, 10)}.html`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `chat_export_${new Date().toISOString().slice(0, 10)}.html`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
     }
+    // *** ENDE KORRIGIERTE DOWNLOAD-FUNKTION ***
 
-    function downloadAppointment(appointment) {
-        if (!appointment.date || !appointment.time) {
-            console.error("Fehlendes Datum oder Zeit. ICS-Download abgebrochen.");
-            return;
+    function initializeChat() {
+        if (chatHistory.length === 0) {
+            let welcomeMessage = "Willkommen beim **AI Termin-Detektiv**! Der API-Schlüssel wird jetzt automatisch und sicher verwaltet, um den 403-Fehler zu vermeiden. Ich bin bereit, Ihre Termin-Infos zu analysieren. Senden Sie mir einfach **Text, einen Screenshot** oder ein **Foto** (z.B. von einem Brief oder einer Kalendereintragung).";
+            // Beim Initialisieren fügen wir die Willkommensnachricht hinzu und speichern sie.
+            const welcomeMessageData = { text: welcomeMessage, sender: 'model', imageUrl: null, structuredResponse: null };
+            const msgElement = createMessageElement(welcomeMessageData);
+            chatWindow.appendChild(msgElement);
+            chatHistory.push(welcomeMessageData);
+            saveChatHistory();
+        } else {
+            loadChatHistory();
         }
-
-        // Berechnung der Endzeit (1 Stunde später)
-        const [year, month, day] = appointment.date.split('-');
-        const [hour, minute] = appointment.time.split(':');
-        const startTime = new Date(year, month - 1, day, hour, minute); 
-        const endTime = new Date(startTime);
-        endTime.setHours(startTime.getHours() + 1);
-        
-        // Formatiere die lokale Zeit für ICS (muss in UTC formatiert werden)
-        const dtstart = toICSDateTime(appointment.date, appointment.time);
-        
-        const endTimeString = `${endTime.getHours().toString().padStart(2, '0')}:${endTime.getMinutes().toString().padStart(2, '0')}`;
-        const endDateString = `${endTime.getFullYear()}-${(endTime.getMonth() + 1).toString().padStart(2, '0')}-${endTime.getDate().toString().padStart(2, '0')}`;
-        const dtend = toICSDateTime(endDateString, endTimeString);
-        
-        // Sanitisiere Zweck und Ort
-        const summary = (appointment.purpose || 'Generierter Termin').replace(/(\r\n|\n|\r)/gm, "\\n");
-        const location = (appointment.location || '').replace(/(\r\n|\n|\r)/gm, "\\n");
-        
-        const icsContent = `BEGIN:VCALENDAR
-VERSION:2.0
-PRODID:-//AI Termin Generator//DE
-BEGIN:VEVENT
-UID:${new Date().getTime()}@termin-detektiv.ai
-DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')}Z
-DTSTART:${dtstart}00
-DTEND:${dtend}00
-SUMMARY:${summary}
-LOCATION:${location}
-END:VEVENT
-END:VCALENDAR`;
-
-        const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `Termin_${appointment.date}_${appointment.time.replace(':', '')}.ics`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        toggleSendButton();
     }
 
-    function deleteChatConfirmation() {
-        if (window.confirm("Sind Sie sicher, dass Sie den gesamten Chatverlauf löschen möchten? Dies löscht den Verlauf NUR aus Ihrem Browser (Session).")) {
-            sessionStorage.removeItem(CHAT_STORAGE_KEY);
-            chatHistory = [];
-            location.reload(); 
-        }
-    }
-
-    document.addEventListener('DOMContentLoaded', loadChatHistory);
+    // --- Event Listener ---
     
-</script>
+    // Senden bei Enter-Taste, aber Zeilenumbruch bei Shift+Enter
+    userInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage();
+        }
+    });
+    
+    // Check, ob der Sende-Button aktiviert werden soll, wenn sich der Text ändert
+    userInput.addEventListener('input', toggleSendButton);
 
+    // Bild-Upload verarbeiten
+    fileInput.addEventListener('change', (event) => {
+        const file = event.target.files[0];
+        if (file && file.type.startsWith('image/')) {
+            currentImageFile = file;
+            document.getElementById('image-preview').src = URL.createObjectURL(file);
+            document.getElementById('image-filename').textContent = file.name;
+            imagePreviewContainer.classList.remove('hidden');
+            toggleSendButton(); // Sende-Button aktivieren
+        } else {
+            resetImageUpload();
+            toggleSendButton(); // Sende-Button deaktivieren
+        }
+    });
+
+    // Bild-Upload abbrechen
+    document.getElementById('cancel-upload').addEventListener('click', () => {
+        resetImageUpload();
+        toggleSendButton();
+    });
+
+    // Chat initialisieren, sobald das DOM geladen ist
+    window.onload = initializeChat;
+
+</script>
 </body>
 </html>
