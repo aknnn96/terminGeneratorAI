@@ -33,16 +33,19 @@
     .loading-dots div:nth-child(3){ animation-delay:0.4s; }
     @keyframes bounce { from{ transform:translateY(0);} to{ transform:translateY(-5px);} }
 
+    /* Flexibles Button-Layout für Vorschläge */
     .interactive-buttons { display:flex; flex-wrap:wrap; gap:8px; margin-top:1rem; padding-top:0.5rem; } 
     .interactive-button {
       display:flex; align-items:center; justify-content:center; gap:8px; 
       background:#10B981; color:#fff; padding:10px 14px; border-radius:0.75rem; font-size:0.9rem; font-weight:600;
       cursor:pointer; transition:background-color .2s, transform .05s; box-shadow:0 1px 3px rgba(0,0,0,0.15);
-      flex-basis: auto; 
-      flex-grow: 1; 
+      /* Basisanpassung für flexibles Layout, alle Buttons gleich groß, max 3 pro Reihe */
+      flex-basis: calc(33.333% - 8px); 
+      min-width: 120px;
     }
     .interactive-button.manual-input {
       background:#6B7280; 
+      flex-basis: 100%; /* Manuelle Eingabe nimmt volle Breite ein */
     }
     .interactive-button:hover { background:#059669; }
     .interactive-button:active { transform:scale(0.99); }
@@ -172,10 +175,12 @@
 
     function toggleSendButton(){
       if(!sendButton||!userInput) return;
-      const text=userInput.value.trim(); const hasImage=currentImageFile!==null; const hasInput=Boolean(text)||hasImage; const isInteracting=currentInteraction!==null;
+      const text=userInput.value.trim(); const hasImage=currentImageFile!==null; const hasInput=Boolean(text)||hasImage; 
+      // WICHTIG: userInput.disabled ist IMMER false, da der Nutzer immer tippen können soll
       sendButton.disabled=!hasInput; 
       userInput.disabled=false; 
-      userInput.placeholder=isInteracting?'Bitte wählen Sie eine Option oder geben Sie die Antwort direkt ein...':'Termin-Details eingeben...';
+      // Platzhalter anpassen, wenn Interaktion ansteht
+      userInput.placeholder=currentInteraction?'Bitte geben Sie hier Ihre Korrektur/Antwort ein oder wählen Sie oben eine Option...':'Termin-Details eingeben...';
     }
     // --- Ende Kalender Hilfsfunktionen ---
 
@@ -259,8 +264,8 @@
           
           if(Array.isArray(data.options)){
             data.options.forEach(opt=>{
-              // **KORREKTUR:** Robustere Behandlung von undefined
-              const label = opt && (opt.label || opt.value) ? (opt.label || String(opt.value)) : 'Option';
+              // **KORREKTUR für undefined-Fehler:** Robustere Behandlung von fehlendem label/value
+              const label = opt && (opt.label || opt.value) ? (opt.label || String(opt.value)) : 'Option wählen';
               const value = opt && (opt.value ?? opt.label) ? (opt.value ?? opt.label) : label;
 
               const b=document.createElement('button');
@@ -271,22 +276,17 @@
             });
           }
           
-          // Neue Logik für den "Anderen X eingeben" Button
+          // Logik für den "Anderen X eingeben" Button (Manuelle Eingabe)
           let manualButtonText = null;
-          let manualPlaceholder = null;
 
           if(data.interactionType === 'ORT_SELECTION'){
               manualButtonText = 'Anderen Ort eingeben';
-              manualPlaceholder = 'Bitte geben Sie die korrekte Adresse ein und senden Sie sie...';
           } else if (data.interactionType === 'DAUER_SELECTION'){
               manualButtonText = 'Andere Dauer eingeben (z.B. 1:45)';
-              manualPlaceholder = 'Bitte geben Sie die Dauer in HH:MM ein und senden Sie sie...';
           } else if (data.interactionType === 'ZWECK_SELECTION'){
               manualButtonText = 'Anderen Zweck eingeben';
-              manualPlaceholder = 'Bitte geben Sie den genauen Zweck ein und senden Sie ihn...';
           } else if (data.interactionType === 'REMINDER_SELECTION'){
               manualButtonText = 'Eigene Erinnerungszeit eingeben';
-              manualPlaceholder = 'Bitte geben Sie die Erinnerungszeit ein (z.B. 45 Minuten davor) und senden Sie sie...';
           }
 
           if(manualButtonText){
@@ -294,10 +294,11 @@
               manualInputButton.type = 'button';
               manualInputButton.className = 'interactive-button manual-input'; 
               manualInputButton.textContent = manualButtonText;
+              // Bei Klick auf "manuelle Eingabe" wird die Interaktion im Hintergrund beendet, 
+              // sodass der Nutzer sofort das Textfeld verwenden kann.
               manualInputButton.onclick = () => { 
-                  userInput.placeholder = manualPlaceholder;
-                  userInput.focus();
                   currentInteraction = null;
+                  userInput.focus();
                   toggleSendButton();
               };
               box.appendChild(manualInputButton); 
@@ -307,7 +308,7 @@
               textEl.appendChild(box); 
           }
           
-          // Hinweis für Dauer-Buttons
+          // Hinweis für Dauer/Reminder-Buttons
           if(data.interactionType === 'DAUER_SELECTION' || data.interactionType === 'REMINDER_SELECTION'){
               const hint = document.createElement('p');
               hint.className = 'text-sm text-gray-500 mt-2';
@@ -347,19 +348,24 @@
       const currentDate=new Date().toLocaleDateString('de-DE',{year:'numeric',month:'2-digit',day:'2-digit'});
 
       // **AKTUALISIERTER SYSTEM PROMPT**
-      const systemPrompt=`Sie sind der 'AI Termin-Detektiv'. Das **HEUTIGE DATUM ist: ${currentDate}**. Extrahieren und pflegen Sie Datum (YYYY-MM-DD), Uhrzeit (HH:MM), Dauer (HH:MM), Ort (vollständige Adresse) und Zweck. Behalten Sie den Chatverlauf immer im Kontext.
+      const systemPrompt=`Sie sind der 'AI Termin-Detektiv'. Das **HEUTIGE DATUM ist: ${currentDate}**. Extrahieren und pflegen Sie Datum (YYYY-MM-DD), Uhrzeit (HH:MM), Dauer (HH:MM), Ort (vollständige Adresse) und Zweck. Behalten Sie den Chatverlauf immer im Kontext. Nutzen Sie Google Search, um Adressen von Ärzten, Geschäften oder Orten zu finden.
 Wenn Daten fehlen oder unklar sind, antworten Sie ausschließlich mit einem <INTERACTION>-Block im JSON-Format.
 
 Spezifische Anweisungen für die interaktive Abfrage:
 1.  **Fehlender Ort (ORT_SELECTION):**
-    * Wenn ein Ort unklar ist (z.B. nur "Bretzenheim"), soll der 'message'-Text lauten: "**Ort**\nDer Termin-Detektiv hat keine eindeutige Adresse erkannt. Geben Sie bitte unten die korrekte Adresse ein oder wählen Sie einen Vorschlag aus:". Fügen Sie 5 präzise Adressvorschläge (z.B. von "Dr. Weber in Bretzenheim") als 'options' hinzu.
-    * Wenn ein Ort erkannt wurde (z.B. "Dr. Weber, Hauptstraße 10"), aber das Feld "Ort" als unvollständig gekennzeichnet ist, soll der 'message'-Text lauten: "**Ort**\nDer Termin-Detektiv hat folgende Adresse erkannt: **[Erkannte Adresse]**. Falls Korrektur notwendig, geben Sie bitte unten die korrekte Adresse ein oder wählen Sie einen Vorschlag aus:". Fügen Sie 5 alternative Adressvorschläge als 'options' hinzu.
+    * Wenn ein Ort unklar ist (z.B. nur "Bretzenheim"), soll der 'message'-Text lauten: "**Ort**\nDer Termin-Detektiv hat keine eindeutige Adresse erkannt. Geben Sie bitte unten die korrekte Adresse ein oder wählen Sie einen Vorschlag aus:". Fügen Sie 5 präzise Adressvorschläge (aus Google Search, z.B. von "Dr. Weber in Bretzenheim") als 'options' (mit label=Adresse, value=Adresse) hinzu.
+    * Wenn ein Ort erkannt wurde (z.B. "Dr. Weber, Hauptstraße 10"), aber das Feld "Ort" als unvollständig gekennzeichnet ist, soll der 'message'-Text lauten: "**Ort**\nDer Termin-Detektiv hat folgende Adresse erkannt: **[Erkannte Adresse]**. Falls Korrektur notwendig, geben Sie bitte unten die korrekte Adresse ein oder wählen Sie einen Vorschlag aus:". Fügen Sie 5 alternative Adressvorschläge (aus Google Search) als 'options' hinzu.
+    * Wenn der Ort eindeutig erkannt wird und die Adresse vollständig ist, darf keine INTERACTION für ORT_SELECTION erfolgen.
 2.  **Fehlende Dauer (DAUER_SELECTION):**
-    * Der 'message'-Text soll lauten: "**Dauer**\nBitte wählen Sie die voraussichtliche Dauer aus:". Fügen Sie 4 Dauer-Buttons hinzu (z.B. 30 Min, 1 Stunde, 2 Stunden, 3 Stunden). Die Werte sollen in HH:MM sein (z.B. "0:30", "1:00").
+    * Der 'message'-Text soll lauten: "**Dauer**\nBitte wählen Sie die voraussichtliche Dauer aus:". Fügen Sie 4 Dauer-Buttons hinzu mit festen Labels und Werten:
+        * Label: "30 Min", Value: "0:30"
+        * Label: "1 Stunde", Value: "1:00"
+        * Label: "2 Stunden", Value: "2:00"
+        * Label: "3 Stunden", Value: "3:00"
 3.  **Fehlender Zweck (ZWECK_SELECTION):**
-    * Der 'message'-Text soll lauten: "**Zweck**\nInformationen". Fügen Sie 5 intelligente, kontextbezogene Vorschläge als 'options' hinzu (z.B. bei Arzttermin: "Regelmäßige Kontrolle", "Blutabnahme").
+    * Der 'message'-Text soll lauten: "**Zweck**\nBitte wählen Sie einen passenden Zweck aus:". Fügen Sie 5 intelligente, kontextbezogene Vorschläge als 'options' hinzu (z.B. bei Arzttermin: "Regelmäßige Kontrolle", "Blutabnahme", "Erstuntersuchung", "Folgetermin", "Impftermin").
 4.  **Erinnerung (REMINDER_SELECTION, optional):**
-    * Nachdem alle Hauptfelder vollständig sind, fragen Sie optional: "**Erinnerung**\nWann möchten Sie erinnert werden?". Fügen Sie 4 Vorschläge als 'options' hinzu (z.B. 30 Minuten davor, 1 Stunde davor, 2 Stunden davor, 3 Stunden davor).
+    * Nachdem alle Hauptfelder (Datum, Uhrzeit, Dauer, Ort, Zweck) vollständig sind, fragen Sie optional: "**Erinnerung**\nWann möchten Sie erinnert werden?". Fügen Sie 4 Vorschläge als 'options' hinzu (z.B. "30 Minuten davor", "1 Stunde davor", "2 Stunden davor", "3 Stunden davor").
 
 Wenn alle Hauptfelder (Datum, Uhrzeit, Dauer, Ort, Zweck) vorliegen, liefern Sie zusätzlich:
 <EXTRACT>
@@ -388,7 +394,8 @@ Im JSON in <DATA> fehlende Felder als "[FEHLT]" kennzeichnen. Antworten Sie auf 
 
       const apiContents = [...historyForApi, { role:'user', parts }];
 
-      const payload = { contents: apiContents, tools:[{ "google_search":{} }], systemInstruction:{ parts:[{ text: systemPrompt }] } };
+      // WICHTIG: Google Search Tool ist im Prompt angefordert und muss enthalten sein
+      const payload = { contents: apiContents, tools:[{ googleSearch:{} }], systemInstruction:{ parts:[{ text: systemPrompt }] } };
 
       if (!parts || !Array.isArray(parts) || parts.length === 0 || (!userMessageText && !userImageFile)) {
         return { text: "Bitte geben Sie eine Nachricht ein oder laden Sie ein Bild hoch.", type: "error" };
@@ -417,6 +424,7 @@ Im JSON in <DATA> fehlende Felder als "[FEHLT]" kennzeichnen. Antworten Sie auf 
     async function handleChatFlow(userMessageText, userImageFile=null){
       if(!userMessageText && !userImageFile) return;
       showLoading();
+      // userInput.disabled = false; (wird in toggleSendButton gesteuert)
       try{
         const response = await sendApiRequest(userMessageText, userImageFile);
         addMessageToChat(response.text, response.type === 'error' ? 'system' : 'model');
@@ -440,7 +448,13 @@ Im JSON in <DATA> fehlende Felder als "[FEHLT]" kennzeichnen. Antworten Sie auf 
       resetImageUpload();
       toggleSendButton();
 
-      await handleChatFlow(text, imageFile);
+      // **WICHTIG:** Wenn eine Interaktion aktiv ist und der Nutzer tippt,
+      // senden wir die Eingabe als Antwort auf die Interaktion.
+      const messageToSend = currentInteraction && !imageFile ? `**Interaktive Korrektur/Ergänzung:** Feld (${currentInteraction.interactionType}) = **${text}**. Aktualisiere den Termin-Entwurf.` : text;
+      
+      currentInteraction = null; // Interaktion nach Texteingabe beenden
+
+      await handleChatFlow(messageToSend, imageFile);
     }
 
     async function handleInteractiveResponse(value){
@@ -454,7 +468,8 @@ Im JSON in <DATA> fehlende Felder als "[FEHLT]" kennzeichnen. Antworten Sie auf 
       currentInteraction = null;
       toggleSendButton();
 
-      const msg = `**Interaktive Korrektur:** Feld (${interaction.interactionType}) = **${v}**. Aktualisiere den Termin-Entwurf.`;
+      // Sendet die Auswahl als spezifische Korrektur an das Modell
+      const msg = `**Interaktive Korrektur/Ergänzung:** Feld (${interaction.interactionType}) = **${v}**. Aktualisiere den Termin-Entwurf.`;
       await handleChatFlow(msg);
     }
 
@@ -473,12 +488,12 @@ Im JSON in <DATA> fehlende Felder als "[FEHLT]" kennzeichnen. Antworten Sie auf 
       currentImageFile = null;
       userInput.value = '';
       sendButton.disabled = true;
-      userInput.disabled = false;
+      userInput.disabled = false; // Muss immer false sein
 
       loadChatHistory(); 
 
       if(chatHistory.length===0){
-        const welcome = "Willkommen beim **AI Termin-Detektiv**! Das heutige Datum ist der **" + new Date().toLocaleDateString('de-DE') + "**. Senden Sie Text, einen Screenshot oder ein Foto; fehlende Details werden interaktiv abgefragt.";
+        const welcome = "Willkommen beim **AI Termin-Detektiv**! Das heutige Datum ist der **" + new Date().toLocaleDateString('de-DE') + "**. Senden Sie Text, einen Screenshot oder ein Foto; fehlende Details werden interaktiv abgefragt. Sie können jederzeit tippen oder die Vorschläge wählen.";
         addMessageToChat(welcome, 'model');
       }
 
