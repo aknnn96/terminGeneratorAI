@@ -168,7 +168,7 @@
     function toggleSendButton(){
       if(!sendButton||!userInput) return;
       const text=userInput.value.trim(); const hasImage=currentImageFile!==null; const hasInput=Boolean(text)||hasImage; const isInteracting=currentInteraction!==null;
-      sendButton.disabled=!hasInput; userInput.disabled=isInteracting;
+      userInput.disabled=isInteracting;
       userInput.placeholder=isInteracting?'Bitte wählen Sie eine Option oder geben Sie die Antwort direkt ein...':'Termin-Details eingeben...';
     }
 
@@ -455,4 +455,5 @@ Im JSON in <DATA> fehlende Felder als "[FEHLT]" kennzeichnen; in der Anzeige sta
   </script>
 </body>
 </html>
+
 
