@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Termin-Generator (Schlüssel hinterlegt)</title>
+    <title>AI Termin-Generator (Mit automatischer Schlüssel-Verwaltung)</title>
     
     <!-- Lade Tailwind CSS für modernes Styling -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -81,7 +81,7 @@
             <span class="material-icons mr-2">smart_toy</span> AI Termin-Detektiv
         </h1>
         <div class="action-buttons flex space-x-2">
-            <!-- Schlüssel-Icon entfernt, da der Schlüssel fest hinterlegt ist -->
+            <!-- Schlüssel-Icon entfernt, da der Schlüssel nun automatisch verwaltet wird -->
             <button onclick="downloadChat()" title="Chat als HTML herunterladen" class="p-1 rounded-full hover:bg-indigo-700 transition">
                 <span class="material-icons">cloud_download</span>
             </button>
@@ -127,8 +127,9 @@
     const CHAT_STORAGE_KEY = "canvas_termin_hardcoded_history";
     const GEMINI_MODEL = "gemini-2.5-flash-preview-09-2025"; 
 
-    // API Key wurde vom Benutzerwunsch entsprechend direkt hier hinterlegt
-    const GEMINI_API_KEY = "AIzaSyD_DevrmddfF5bmXiQUbvbwQpS0HGEgfOY";
+    // API Key wird als leere Zeichenkette definiert, um die automatische
+    // Schlüssel-Verwaltung der Canvas-Plattform zu nutzen und den 403-Fehler zu vermeiden.
+    const GEMINI_API_KEY = "";
 
     const chatWindow = document.getElementById('chat-window');
     const userInput = document.getElementById('user-input');
@@ -355,7 +356,7 @@
                 **Antwort-Regeln (EXTREM STRIKT EINHALTEN):**
                 1. Die Antwort MUSS IMMER mit einem kurzen, einleitenden/erklärenden Satz beginnen (Feld "comment").
                 2. UNMITTELBAR, in der **nächsten Zeile** nach diesem Satz, MUSS der JSON-Code-Block folgen. Dieser Block MUSS mit \`\`\`json beginnen und mit \`\`\` enden.
-                3. **JSON-STATUS:** Setze "status" auf "ok", wenn Datum, Zeit und Zweck klar sind. Setze ihn auf **"needs_clarification"**, wenn Datum, Zeit oder Zweck **unklar oder mehrdeutig** sind (z.B. "nächsten Freitag").
+                3. **JSON-STATUS:** Setze "status" auf "ok", wenn Datum, Zeit und Zweck klar sind. Setze ihn auf **"needs_clarification"** wenn Datum, Zeit oder Zweck **unklar oder mehrdeutig** sind (z.B. "nächsten Freitag").
                 
                 **ZUSÄTZLICHE REGEL (TIPPFEHLER):** Wenn Sie einen wahrscheinlichen Tippfehler bei einem Namen, einer Entität oder einem Ort feststellen (z.B. 'Doktor Werbere' statt 'Doktor Weber' oder 'Berlinr' statt 'Berlin'), setzen Sie den Status auf **"needs_clarification"** und bieten Sie entsprechende Korrekturvorschläge im 'suggestions'-Array an. Nutzen Sie hierfür den Typ 'purpose_fix' (für Namen/Zweck) oder 'location_fix' (für Orte).
 
@@ -419,6 +420,7 @@
                         continue;
                     }
                 } else if (!response.ok) {
+                    // Erneutes Fehler-Logging, falls der 403-Fehler (o.ä.) auftritt
                     const errorData = await response.json();
                     return `Fehler beim Senden an Gemini. Status: ${response.status}. Details: ${errorData.error.message}`;
                 }
@@ -861,7 +863,7 @@
 
     function initializeChat() {
         if (chatHistory.length === 0) {
-            let welcomeMessage = "Willkommen beim **AI Termin-Detektiv**! Der API-Schlüssel ist hinterlegt. Ich bin bereit, Ihre Termin-Infos zu analysieren. Senden Sie mir einfach **Text, einen Screenshot** oder ein **Foto** (z.B. von einem Brief oder einer Kalendereintragung).";
+            let welcomeMessage = "Willkommen beim **AI Termin-Detektiv**! Der API-Schlüssel wird jetzt automatisch und sicher verwaltet, um den 403-Fehler zu vermeiden. Ich bin bereit, Ihre Termin-Infos zu analysieren. Senden Sie mir einfach **Text, einen Screenshot** oder ein **Foto** (z.B. von einem Brief oder einer Kalendereintragung).";
             addMessageToChat(welcomeMessage, 'model');
         } else {
             loadChatHistory();
