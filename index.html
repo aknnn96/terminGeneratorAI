@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>AI Termin-Detektiv V25 (Production-Ready)</title>
+  <title>AI Termin-Detektiv V26 (GitHub Pages + URL-Key)</title>
 
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
@@ -62,9 +62,15 @@
 
     .delete-button { background:#F87171; }
     .delete-button:hover { background:#EF4444; }
+
+    #keyWarning { background:#FEF3C7; border:2px solid #F59E0B; color:#92400E; padding:1rem; border-radius:0.75rem; margin:1rem; font-weight:600; }
   </style>
 </head>
 <body class="bg-gray-50">
+  <div id="keyWarning" class="hidden">
+    ⚠️ <strong>API-Key fehlt!</strong> Bitte fügen Sie <code>?key=IHR_API_KEY</code> zur URL hinzu.
+  </div>
+
   <div id="app" class="chat-container">
     <header class="bg-white shadow-md p-4 flex justify-end items-center sticky top-0 z-10 flex-shrink-0 gap-3">
       <h1 class="text-xl font-bold text-gray-800 flex items-center gap-2 mr-auto">
@@ -124,7 +130,17 @@
   </div>
 
   <script type="module">
-    const API_ENDPOINT = "/.netlify/functions/gemini";
+    // API-Key aus URL-Parameter lesen
+    const urlParams = new URLSearchParams(window.location.search);
+    const API_KEY = urlParams.get('key');
+    
+    if (!API_KEY || API_KEY.trim() === '') {
+      document.getElementById('keyWarning').classList.remove('hidden');
+      document.getElementById('app').style.display = 'none';
+      throw new Error("API-Key fehlt in der URL. Bitte ?key=IHR_API_KEY hinzufügen.");
+    }
+
+    const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${API_KEY}`;
     const STORAGE_KEY = 'terminDetektivChatHistory';
     const UNLOCK_CODE = "10122022";
 
@@ -239,11 +255,10 @@
         const ready = data && data.Datum && !data.Datum.includes('[FEHLT]') && data.Dauer && !data.Dauer.includes('[FEHLT]') && data.Ort && !data.Ort.includes('[FEHLT]') && data.Zweck && !data.Zweck.includes('[FEHLT]');
         
         if(ready){
-          // "Termin generieren"-Button
           const genBtn=document.createElement('button'); genBtn.className='generate-button';
           genBtn.innerHTML=`<span class="material-icons" style="font-size:20px;">event</span><span>Termin generieren</span>`;
           genBtn.onclick=(ev)=>{
-            ev.target.style.display='none'; // Button ausblenden
+            ev.target.style.display='none';
             const actions=document.createElement('div'); actions.className='calendar-actions';
             const g=document.createElement('a'); g.href=createGoogleCalendarLink(data); g.target='_blank'; g.className='calendar-button google-button';
             g.innerHTML=`<span class="material-icons" style="font-size:18px;">event_available</span><span>Zum Google Kalender hinzufügen</span>`;
@@ -343,7 +358,6 @@
     async function sendApiRequest(userMessageText, userImageFile=null){
       const currentDate=new Date().toLocaleDateString('de-DE',{year:'numeric',month:'2-digit',day:'2-digit'});
 
-      // Unlock-Check
       if(userMessageText.trim() === UNLOCK_CODE){
         unlocked = true;
         return { text: "🔓 **Freier Modus aktiviert.** Sie können nun beliebige Fragen stellen.", type:'success' };
@@ -451,7 +465,7 @@ KEINE weiteren Fragen, KEINE zusätzlichen Texte.`;
 
       if (!parts || !Array.isArray(parts) || parts.length === 0 || (!userMessageText && !userImageFile)) { return { text: "Bitte geben Sie eine Nachricht ein oder laden Sie ein Bild hoch.", type: "error" }; }
 
-      const resp = await fetch(API_ENDPOINT, { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(payload) });
+      const resp = await fetch(API_URL, { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(payload) });
       const ct = resp.headers.get('content-type') || ''; let data, raw;
       if (ct.includes('application/json')) data = await resp.json().catch(()=>null); else raw = await resp.text().catch(()=>'');
 
