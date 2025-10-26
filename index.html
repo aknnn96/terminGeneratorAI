@@ -3,10 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>AI Termin-Detektiv Interaktiv V14 (Interaktionen fix)</title>
+  <title>AI Termin-Detektiv Interaktiv V15 (Netlify + Buttons Fix)</title>
 
+  <!-- Tailwind CSS + Material Icons -->
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
+
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
     html, body { height: 100%; margin: 0; }
@@ -105,83 +107,85 @@
   </div>
 
   <script type="module">
-    // Basis-Konfiguration (Hinweis: API-Key nicht im Client ausliefern – Proxy/Ephemeral Tokens empfohlen)[web:30][web:32]
-    const STORAGE_KEY = 'terminDetektivChatHistory';
-    const API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent";
-    const GEMINI_API_KEY = "YOUR_KEY_HERE";
+    // Frontend ruft Netlify Function-Proxy auf (kein API-Key im Client)[web:30]
+    const API_ENDPOINT = "/.netlify/functions/gemini";
 
-    // Zustände
+    const STORAGE_KEY = 'terminDetektivChatHistory';
+
     let chatHistory = [];
     let currentImageFile = null;
     let currentInteraction = null;
 
-    // DOM
     let chatWindow, userInput, sendButton, downloadChatButton, fileInput, imagePreviewContainer, loadingIndicator;
 
-    // Speicher
     function saveChatHistory(){ try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(chatHistory)); }catch(e){ console.error(e); } }
     function loadChatHistory(){ try{ const s=localStorage.getItem(STORAGE_KEY); if(s){ chatHistory=JSON.parse(s); renderChatHistory(); } }catch(e){ console.error(e); } }
 
-    // Kalender-Helfer
-    function durationToMinutes(d){ if(d.includes('[FEHLT]')) return 60; const p=d.split(':'); return p.length===2 ? (+p[0])*60+(+p[1]) : 60; }
+    function renderChatHistory(){
+      if(!chatWindow) return;
+      chatWindow.innerHTML='';
+      currentInteraction=null;
+      chatHistory.forEach(m=> chatWindow.appendChild(createMessageElement(m)));
+      scrollToBottom();
+      toggleSendButton();
+    }
+
+    function durationToMinutes(d){ if(!d || d.includes('[FEHLT]')) return 60; const p=d.split(':'); return p.length===2 ? (+p[0])*60+(+p[1]) : 60; }
     function calculateEndTime(date,time,dur){
-      if(time.includes('[FEHLT]')) return date.replace(/-/g,'')+'T235959';
+      if(!time || time.includes('[FEHLT]')) return date.replace(/-/g,'')+'T235959';
       const start=new Date(date+'T'+time+':00'); const end=new Date(start.getTime()+dur*60000);
-      const y=end.getFullYear(), m=String(end.getMonth()+1).padStart(2,'0'), d=String(end.getDate()).padStart(2,'0');
+      const y=end.getFullYear(), m=String(end.getMonth()+1).padStart(2,'0'), d_=String(end.getDate()).padStart(2,'0');
       const hh=String(end.getHours()).padStart(2,'0'), mm=String(end.getMinutes()).padStart(2,'0');
-      return `${y}${m}${d}T${hh}${mm}00`;
+      return `${y}${m}${d_}T${hh}${mm}00`;
     }
     function createGoogleCalendarLink(data){
       const title=encodeURIComponent(data.Zweck||'Termin');
       const location=encodeURIComponent(data.Ort||'');
-      const datePart=data.Datum.replace(/-/g,''); const dur=durationToMinutes(data.Dauer);
+      const datePart=(data.Datum||'').replace(/-/g,''); const dur=durationToMinutes(data.Dauer||'[FEHLT]');
       let startDate,endDate;
-      if(data.Uhrzeit.includes('[FEHLT]')){ startDate=datePart; const s=new Date(data.Datum), e=new Date(s); e.setDate(s.getDate()+1); endDate=e.toISOString().split('T')[0].replace(/-/g,''); }
-      else { const startTime=data.Uhrzeit.replace(/:/g,'')+'00'; startDate=datePart+'T'+startTime; endDate=calculateEndTime(data.Datum,data.Uhrzeit,dur); }
-      return `https://www.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${startDate.replace(/[-:]/g,'')}/${endDate.replace(/[-:]/g,'')}&location=${location}&sf=true&output=xml`;
+      if(!data.Uhrzeit || data.Uhrzeit.includes('[FEHLT]')){ startDate=datePart; const s=new Date(data.Datum); const e=new Date(s); e.setDate(s.getDate()+1); endDate=e.toISOString().split('T')[0].replace(/-/g,''); }
+      else { const st=data.Uhrzeit.replace(/:/g,'')+'00'; startDate=datePart+'T'+st; endDate=calculateEndTime(data.Datum,data.Uhrzeit,dur); }
+      return `https://www.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${startDate}/${endDate}&location=${location}&sf=true&output=xml`;
     }
     function createICSContent(data){
       const uid=Date.now(); const now=new Date().toISOString().replace(/[-:]/g,'').split('.')[0]+'Z';
-      const summary=data.Zweck||'Termin', location=data.Ort||'', datePart=data.Datum.replace(/-/g,''), dur=durationToMinutes(data.Dauer);
+      const summary=data.Zweck||'Termin', location=data.Ort||'', datePart=(data.Datum||'').replace(/-/g,''), dur=durationToMinutes(data.Dauer||'[FEHLT]');
       let dtstart, dtend;
-      if(data.Uhrzeit.includes('[FEHLT]')){ dtstart=`DTSTART;VALUE=DATE:${datePart}`; const s=new Date(data.Datum+'T00:00:00'); const e=new Date(s); e.setDate(s.getDate()+1); dtend=`DTEND;VALUE=DATE:${e.toISOString().split('T')[0].replace(/-/g,'')}`; }
-      else { const st=data.Uhrzeit.replace(/:/g,'')+'00'; const et=calculateEndTime(data.Datum,data.Uhrzeit,dur).split('T')[1]; dtstart=`DTSTART:${datePart}T${st}`; dtend=`DTEND:${datePart}T${et}`; }
+      if(!data.Uhrzeit || data.Uhrzeit.includes('[FEHLT]')){
+        dtstart=`DTSTART;VALUE=DATE:${datePart}`;
+        const s=new Date(data.Datum+'T00:00:00'); const e=new Date(s); e.setDate(s.getDate()+1);
+        dtend=`DTEND;VALUE=DATE:${e.toISOString().split('T')[0].replace(/-/g,'')}`;
+      } else {
+        const st=data.Uhrzeit.replace(/:/g,'')+'00';
+        const et=calculateEndTime(data.Datum,data.Uhrzeit,dur).split('T')[1];
+        dtstart=`DTSTART:${datePart}T${st}`; dtend=`DTEND:${datePart}T${et}`;
+      }
       return ['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//AI Termin-Detektiv//NONSGML v1.0//DE','BEGIN:VEVENT',`UID:${uid}@termin-detektiv.de`,`DTSTAMP:${now}`,dtstart,dtend,`SUMMARY:${summary}`,`LOCATION:${location}`,'END:VEVENT','END:VCALENDAR'].join('\r\n');
     }
-    function downloadICS(content){ const blob=new Blob([content],{type:'text/calendar;charset=utf-8'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`termin_${Date.now()}.ics`; document.body.appendChild(a); a.click(); document.body.removeChild(a); }
+    function downloadICS(c){ const blob=new Blob([c],{type:'text/calendar;charset=utf-8'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`termin_${Date.now()}.ics`; document.body.appendChild(a); a.click(); document.body.removeChild(a); }
 
-    // UI
     function scrollToBottom(){ if(!chatWindow) return; setTimeout(()=>{ chatWindow.scrollTop=chatWindow.scrollHeight; },10); }
     function toggleSendButton(){
       if(!sendButton||!userInput) return;
-      const text=userInput.value.trim(); const hasImage=currentImageFile!==null; const hasInput=text.length>0||hasImage; const isInteracting=currentInteraction!==null;
+      const text=userInput.value.trim(); const hasImage=currentImageFile!==null; const hasInput=Boolean(text)||hasImage; const isInteracting=currentInteraction!==null;
       sendButton.disabled=!hasInput; userInput.disabled=isInteracting;
       userInput.placeholder=isInteracting?'Bitte wählen Sie eine Option oder geben Sie die Antwort direkt ein...':'Termin-Details eingeben...';
     }
 
-    // Textformatierung + EXTRACT Rendering
     function formatMarkdownToHtml(raw){
-      let t = raw.replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/\*(.*?)\*/g,'<em>$1</em>');
+      let t = raw.replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/\*(.*?)\*\*/g,'<em>$1</em>').replace(/\*(.*?)\*/g,'<em>$1</em>');
 
-      // Fallback: nacktes Interaktions-JSON in <INTERACTION> wrappen
       if(!t.includes('<INTERACTION>')){
         const loose = t.match(/\{[\s\S]*"interactionType"[\s\S]*\}/);
         if(loose){ t = t.replace(loose[0], `<INTERACTION>${loose[0]}</INTERACTION>`); }
       }
 
-      // EXTRACT/DATA block
-      const rx = /<EXTRACT>(.*?)<DATA>(.*?)<\/DATA><\/EXTRACT>/s;
-      const m = t.match(rx);
+      const rx=/<EXTRACT>(.*?)<DATA>(.*?)<\/DATA><\/EXTRACT>/s; const m=t.match(rx);
       if(m){
-        const extraction = m[1].trim();
-        const rawJson = m[2].trim();
-
-        const pre = t.substring(0,m.index).trim().replace(/\n/g,'<br>');
-        const post = t.substring(m.index+m[0].length).trim().replace(/\n/g,'<br>');
-        let html = pre.replace(/<br>$/,'');
-
-        let data=null; try{ data=JSON.parse(rawJson); }catch(e){ console.error('DATA parse error',e); }
-
+        const extraction=m[1].trim(); const rawJson=m[2].trim();
+        const pre=t.substring(0,m.index).trim().replace(/\n/g,'<br>'); const post=t.substring(m.index+m[0].length).trim().replace(/\n/g,'<br>');
+        let html=pre.replace(/<br>$/,'');
+        let data=null; try{ data=JSON.parse(rawJson); }catch(e){ console.error('DATA parse error', e); }
         const block=document.createElement('div'); block.className='extraction-block';
         const content=extraction.replace(/\[FEHLT\]/g,'-').replace(/<br>/g,'\n').split('\n').filter(l=>l.trim().length>0).map(l=>`<div>${l}</div>`).join('');
         block.innerHTML=`<strong>Termin-Details:</strong><br>`+content;
@@ -189,22 +193,25 @@
         const ready = data && data.Datum && !data.Datum.includes('[FEHLT]') && data.Dauer && !data.Dauer.includes('[FEHLT]');
         if(ready){
           const actions=document.createElement('div'); actions.className='calendar-actions';
-          const g=document.createElement('a'); g.href=createGoogleCalendarLink(data); g.target='_blank'; g.className='calendar-button google-button'; g.innerHTML=`<span class="material-icons" style="font-size:18px;line-height:1;">event_available</span><span>Zum Google Kalender hinzufügen</span>`;
-          const icsBtn=document.createElement('button'); icsBtn.className='calendar-button ics-button'; icsBtn.innerHTML=`<span class="material-icons" style="font-size:18px;line-height:1;">download</span><span>ICS-Datei herunterladen</span>`; icsBtn.onclick=()=>downloadICS(createICSContent(data));
+          const g=document.createElement('a'); g.href=createGoogleCalendarLink(data); g.target='_blank'; g.className='calendar-button google-button';
+          g.innerHTML=`<span class="material-icons" style="font-size:18px;line-height:1;">event_available</span><span>Zum Google Kalender hinzufügen</span>`;
+          const icsBtn=document.createElement('button'); icsBtn.className='calendar-button ics-button';
+          icsBtn.innerHTML=`<span class="material-icons" style="font-size:18px;line-height:1;">download</span><span>ICS-Datei herunterladen</span>`;
+          icsBtn.onclick=()=>downloadICS(createICSContent(data));
           actions.appendChild(g); actions.appendChild(icsBtn); block.appendChild(actions);
-        } else if (data){
-          const p=document.createElement('p'); p.className='text-sm text-gray-500 mt-3 border-top border-gray-200 pt-3'; p.innerHTML='Bitte vervollständigen Sie die fehlenden Felder (z. B. Dauer), um Kalender-Aktionen zu aktivieren.';
-          block.appendChild(p);
+        } else if (data) {
+          const hint=document.createElement('p'); hint.className='text-sm text-gray-500 mt-3 border-t border-gray-200 pt-3';
+          hint.innerHTML='Bitte vervollständigen Sie die fehlenden Felder, um Kalender-Aktionen zu aktivieren.';
+          block.appendChild(hint);
         }
 
         const container=document.createElement('div'); container.appendChild(block); html+=container.innerHTML;
         if(post) html+='<br>'+post;
-        t = html;
+        t=html;
       }
       return t.replace(/\n/g,'<br>');
     }
 
-    // Nachricht-Rendering inkl. INTERACTION Buttons
     function createMessageElement(msg){
       const row=document.createElement('div'); row.className=`message-row ${msg.sender==='user'?'user-message-row':'bot-message-row'}`;
       const cont=document.createElement('div'); cont.className='message-content';
@@ -213,34 +220,30 @@
 
       const textEl=document.createElement('div'); textEl.className=`message ${msg.sender==='user'?'user-message':'bot-message'}`;
 
-      // Jede neue Modell-Antwort beendet vorherige Interaktion
       if(msg.sender==='model'){ currentInteraction=null; }
 
       let raw = msg.text;
 
-      // SICHER: Interaktion aus nacktem JSON herausziehen
       if(!raw.includes('<INTERACTION>')){
         const loose = raw.match(/\{[\s\S]*"interactionType"[\s\S]*\}/);
         if(loose){ raw = raw.replace(loose[0], `<INTERACTION>${loose[0]}</INTERACTION>`); }
       }
 
-      // Render Interaktion
       const iRx=/<INTERACTION>(.*?)<\/INTERACTION>/s; const iMatch=raw.match(iRx);
       if(msg.sender==='model' && iMatch){
         try{
           const data=JSON.parse(iMatch[1].trim());
-          const prompt = data.message || data.prompt || 'Bitte wählen:';
-          currentInteraction = data;
+          const prompt=data.message || data.prompt || 'Bitte wählen:';
+          currentInteraction=data;
           textEl.innerHTML = formatMarkdownToHtml(prompt) + '<br>';
 
           const box=document.createElement('div'); box.className='interactive-buttons';
-          if(Array.isArray(data.options) && data.options.length){
+          if(Array.isArray(data.options)){
             data.options.forEach(opt=>{
               const b=document.createElement('button');
-              b.type='button';
-              b.className='interactive-button';
-              b.textContent=opt.label || String(opt.value);
-              b.onclick=()=>handleInteractiveResponse(opt.value ?? opt.label);
+              b.type='button'; b.className='interactive-button';
+              b.textContent = opt.label || String(opt.value);
+              b.onclick = () => handleInteractiveResponse(opt.value ?? opt.label);
               box.appendChild(b);
             });
           }
@@ -250,20 +253,16 @@
             box.appendChild(manual);
           }
           textEl.appendChild(box);
-
-          // Resttext ohne den INTERACTION-Block
           raw = raw.replace(iRx,'').trim();
         }catch(e){ console.error('Interaction JSON parse error', e); }
       }
 
       if(raw.length>0){ textEl.innerHTML += formatMarkdownToHtml(raw); }
 
-      cont.appendChild(textEl);
-      row.appendChild(cont);
+      cont.appendChild(textEl); row.appendChild(cont);
       return row;
     }
 
-    // Chat-Helpers
     function addMessageToChat(text, sender, imageUrl=null){
       const data={ text, sender, imageUrl };
       chatHistory.push(data);
@@ -276,19 +275,17 @@
     function showLoading(){ if(loadingIndicator){ loadingIndicator.classList.remove('hidden'); scrollToBottom(); } }
     function hideLoading(){ if(loadingIndicator){ loadingIndicator.classList.add('hidden'); } }
 
-    // Upload
     function resetImageUpload(){
       currentImageFile=null; if(fileInput) fileInput.value=''; if(imagePreviewContainer) imagePreviewContainer.classList.add('hidden');
       const p=document.getElementById('image-preview'); const f=document.getElementById('image-filename'); if(p) p.src=''; if(f) f.textContent='';
     }
     function fileToBase64(file){ return new Promise((res,rej)=>{ const r=new FileReader(); r.readAsDataURL(file); r.onload=()=>res(r.result.split(',')[1]); r.onerror=e=>rej(e); }); }
 
-    // API-Aufruf (für Produktion: Proxy/Ephemeral Tokens)[web:30][web:32]
     async function sendApiRequest(userMessageText, userImageFile=null){
       const currentDate=new Date().toLocaleDateString('de-DE',{year:'numeric',month:'2-digit',day:'2-digit'});
+
       const systemPrompt=`Sie sind der 'AI Termin-Detektiv'. Das **HEUTIGE DATUM ist: ${currentDate}**. Extrahieren Sie Datum (YYYY-MM-DD), Uhrzeit (HH:MM), Dauer (HH:MM), Ort (vollständige Adresse) und Zweck.
-Wenn Daten fehlen, antworten Sie ausschließlich mit einem <INTERACTION>-Block im JSON-Format:
-{"interactionType":"DURATION_SELECTION","message":"Bitte wählen Sie ...","options":[{"label":"30 Minuten","value":"00:30"},{"label":"1 Stunde","value":"01:00"},{"label":"2 Stunden","value":"02:00"}]}
+Wenn Daten fehlen, antworten Sie ausschließlich mit einem <INTERACTION>-Block im JSON-Format (z. B. {"interactionType":"DURATION_SELECTION","message":"Bitte wählen ...","options":[...]}).
 Wenn alle Felder vorliegen, liefern Sie zusätzlich:
 <EXTRACT>
 **Datum:** YYYY-MM-DD
@@ -298,104 +295,149 @@ Wenn alle Felder vorliegen, liefern Sie zusätzlich:
 **Zweck:** Text
 <DATA>{"Datum":"YYYY-MM-DD","Uhrzeit":"HH:MM","Dauer":"HH:MM","Ort":"Adresse","Zweck":"Text"}</DATA>
 </EXTRACT>
-Im JSON in <DATA> fehlende Felder als "[FEHLT]" kennzeichnen.`;
+Im JSON in <DATA> fehlende Felder als "[FEHLT]" kennzeichnen; in der Anzeige stattdessen "-". Antworten Sie auf Deutsch.`;
 
-      const historyForApi = chatHistory.slice(-8).map(m=>({ role:m.sender==='user'?'user':'model', parts:[{text:m.text}] }));
-      let parts=[{text:userMessageText}];
+      const historyForApi = chatHistory.slice(-8).map(m=>({ role:m.sender==='user'?'user':'model', parts:[{ text:m.text }] }));
+
+      let parts=[{ text:userMessageText }];
       if(userImageFile){
         try{
           const base64=await fileToBase64(userImageFile);
           parts=[
-            { text: `Analysiere das angehängte Bild und den Text ("${userMessageText}") und extrahiere/korrigiere die Termindaten.` },
+            { text:`Analysiere das angehängte Bild und den Text ("${userMessageText}") und extrahiere/korrigiere die Termindaten.` },
             { inlineData:{ mimeType:userImageFile.type, data:base64 } }
           ];
         }catch{ return { text:"Ein Fehler ist beim Hochladen des Bildes aufgetreten.", type:'error' }; }
       }
 
-      const payload={ contents:[...historyForApi,{role:'user', parts}], tools:[{"google_search":{}}], systemInstruction:{ parts:[{ text: systemPrompt }] } };
+      const payload = { contents:[...historyForApi, { role:'user', parts }], tools:[{ "google_search":{} }], systemInstruction:{ parts:[{ text: systemPrompt }] } };
 
-      const headers={'Content-Type':'application/json'};
-      if(GEMINI_API_KEY && GEMINI_API_KEY!=='YOUR_KEY_HERE'){ headers['x-goog-api-key']=GEMINI_API_KEY; }
+      const resp = await fetch(API_ENDPOINT, {
+        method:'POST',
+        headers:{ 'Content-Type':'application/json' },
+        body: JSON.stringify(payload)
+      });
 
-      try{
-        const resp=await fetch(API_URL,{ method:'POST', headers, body:JSON.stringify(payload) });
-        if(!resp.ok){
-          const err=await resp.json().catch(()=>({error:{message:resp.statusText}}));
-          return { text:`**API-Fehler (${resp.status})** - ${err.error?err.error.message:resp.statusText}.`, type:'error' };
-        }
-        const result=await resp.json();
-        const text=result.candidates?.[0]?.content?.parts?.[0]?.text || "Keine Antwort erhalten.";
-        return { text, type:'success' };
-      }catch(e){ return { text:`Netzwerkfehler: ${e.message}`, type:'error' }; }
+      if(!resp.ok){
+        const err = await resp.json().catch(()=>({ error:{ message: resp.statusText } }));
+        return { text: `**API-Fehler (${resp.status})** - ${err.error?err.error.message:resp.statusText}.`, type:'error' };
+      }
+      const result = await resp.json();
+      const text = result?.candidates?.[0]?.content?.parts?.[0]?.text || "Keine Antwort erhalten.";
+      return { text, type:'success' };
     }
 
     async function handleChatFlow(userMessageText, userImageFile=null){
-      showLoading(); userInput.disabled=true;
-      const response = await sendApiRequest(userMessageText, userImageFile);
-      hideLoading(); addMessageToChat(response.text,'model'); toggleSendButton();
+      showLoading();
+      userInput.disabled = true; // temporär sperren
+      try{
+        const response = await sendApiRequest(userMessageText, userImageFile);
+        addMessageToChat(response.text, 'model');
+      } finally {
+        hideLoading();
+        userInput.disabled = false; // IMMER wieder freigeben
+        toggleSendButton();
+      }
     }
 
     async function sendMessage(){
-      const text=userInput.value.trim(); const imageFile=currentImageFile;
+      const text = userInput.value.trim();
+      const imageFile = currentImageFile;
       if(!text && !imageFile) return;
-      const imgUrl=imageFile?URL.createObjectURL(imageFile):null;
 
-      sendButton.disabled=true;
-      addMessageToChat(text,'user',imgUrl);
+      const userImageUrl = imageFile ? URL.createObjectURL(imageFile) : null;
+      sendButton.disabled = true;
+      addMessageToChat(text, 'user', userImageUrl);
 
-      userInput.value=''; userInput.style.height='auto';
-      resetImageUpload(); toggleSendButton();
+      userInput.value = '';
+      userInput.style.height = 'auto';
+      resetImageUpload();
+      toggleSendButton();
 
-      await handleChatFlow(text,imageFile);
+      await handleChatFlow(text, imageFile);
     }
 
-    function handleInteractiveResponse(value){
+    async function handleInteractiveResponse(value){
       if(!currentInteraction) return;
-      const interaction=currentInteraction; currentInteraction=null;
-      const userResponse=`**Interaktive Korrektur:** Der Benutzer hat für das fehlende/unklare Feld (${interaction.interactionType}) den Wert: **${value}** ausgewählt/eingegeben. Verarbeite dies, um den Termin-Entwurf zu aktualisieren.`;
-      addMessageToChat(`(Korrigiert/Ergänzt: ${value})`,'user');
-      userInput.value=''; toggleSendButton();
-      handleChatFlow(userResponse);
+      const interaction = currentInteraction;
+
+      // Sofortige UX-Rückmeldung
+      addMessageToChat(`(Korrigiert/Ergänzt: ${value})`, 'user');
+
+      // Zustand zurücksetzen und Eingabe sofort freigeben
+      currentInteraction = null;
+      userInput.disabled = false;
+      toggleSendButton();
+
+      // Anfrage an Modell zur Aktualisierung des Entwurfs
+      const msg = `**Interaktive Korrektur:** Feld (${interaction.interactionType}) = **${value}**. Aktualisiere den Termin-Entwurf.`;
+      await handleChatFlow(msg);
     }
 
     function initializeChat(){
-      chatWindow=document.getElementById('chatWindow');
-      userInput=document.getElementById('userInput');
-      sendButton=document.getElementById('sendButton');
-      downloadChatButton=document.getElementById('downloadChatButton');
-      fileInput=document.getElementById('fileInput');
-      imagePreviewContainer=document.getElementById('imagePreviewContainer');
-      loadingIndicator=document.getElementById('loadingIndicator');
+      chatWindow = document.getElementById('chatWindow');
+      userInput = document.getElementById('userInput');
+      sendButton = document.getElementById('sendButton');
+      downloadChatButton = document.getElementById('downloadChatButton');
+      fileInput = document.getElementById('fileInput');
+      imagePreviewContainer = document.getElementById('imagePreviewContainer');
+      loadingIndicator = document.getElementById('loadingIndicator');
 
-      if(!chatWindow||!userInput||!sendButton){ console.error('FEHLER: Kritische DOM-Elemente fehlen!'); return; }
+      if(!chatWindow || !userInput || !sendButton){ console.error('FEHLER: Kritische DOM-Elemente fehlen!'); return; }
 
-      currentInteraction=null; currentImageFile=null; userInput.value=''; sendButton.disabled=true; userInput.disabled=false;
+      currentInteraction = null;
+      currentImageFile = null;
+      userInput.value = '';
+      sendButton.disabled = true;
+      userInput.disabled = false;
 
       loadChatHistory();
+
       if(chatHistory.length===0){
-        const welcome="Willkommen beim **AI Termin-Detektiv**! Das heutige Datum ist der **"+new Date().toLocaleDateString('de-DE')+"**. Senden Sie Text, einen Screenshot oder ein Foto; fehlende Details werden interaktiv abgefragt.";
-        addMessageToChat(welcome,'model');
+        const welcome = "Willkommen beim **AI Termin-Detektiv**! Das heutige Datum ist der **" + new Date().toLocaleDateString('de-DE') + "**. Senden Sie Text, einen Screenshot oder ein Foto; fehlende Details werden interaktiv abgefragt.";
+        addMessageToChat(welcome, 'model');
       }
 
-      userInput.addEventListener('input',()=>{ userInput.style.height='auto'; userInput.style.height=userInput.scrollHeight+'px'; toggleSendButton(); });
-      userInput.addEventListener('keydown',(e)=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); if(!sendButton.disabled){ sendMessage(); } } });
-
-      fileInput.addEventListener('change',(e)=>{
-        const file=e.target.files[0];
-        if(file && file.type.startsWith('image/')){
-          currentImageFile=file; document.getElementById('image-preview').src=URL.createObjectURL(file);
-          document.getElementById('image-filename').textContent=file.name; imagePreviewContainer.classList.remove('hidden');
-        } else { resetImageUpload(); }
+      userInput.addEventListener('input', ()=>{
+        userInput.style.height='auto';
+        userInput.style.height=userInput.scrollHeight+'px';
         toggleSendButton();
       });
-      document.getElementById('cancel-upload').addEventListener('click',()=>{ resetImageUpload(); toggleSendButton(); });
+      userInput.addEventListener('keydown', (e)=>{
+        if(e.key==='Enter' && !e.shiftKey){
+          e.preventDefault();
+          if(!sendButton.disabled){ sendMessage(); }
+        }
+      });
+
+      fileInput.addEventListener('change', (e)=>{
+        const file=e.target.files[0];
+        if(file && file.type.startsWith('image/')){
+          currentImageFile=file;
+          document.getElementById('image-preview').src=URL.createObjectURL(file);
+          document.getElementById('image-filename').textContent=file.name;
+          imagePreviewContainer.classList.remove('hidden');
+        } else {
+          resetImageUpload();
+        }
+        toggleSendButton();
+      });
+      document.getElementById('cancel-upload').addEventListener('click', ()=>{
+        resetImageUpload();
+        toggleSendButton();
+      });
 
       sendButton.addEventListener('click', sendMessage);
 
-      downloadChatButton.addEventListener('click',()=>{
-        const chatText=chatHistory.map(m=>`${m.sender.toUpperCase()}: ${m.text}`).join('\n\n');
-        const blob=new Blob([chatText],{type:'text/plain;charset=utf-8'}); const a=document.createElement('a');
-        a.href=URL.createObjectURL(blob); a.download=`chat_export_${Date.now()}.txt`; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      downloadChatButton.addEventListener('click', ()=>{
+        const chatText = chatHistory.map(m => `${m.sender.toUpperCase()}: ${m.text}`).join('\n\n');
+        const blob = new Blob([chatText], { type:'text/plain;charset=utf-8' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `chat_export_${Date.now()}.txt`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
       });
 
       toggleSendButton();
