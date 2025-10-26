@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>AI Termin-Detektiv V22 (Strikte Ein-Interaktion-Regel)</title>
+  <title>AI Termin-Detektiv V23 (Ultra-Strenge Formaterzwingung)</title>
 
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
@@ -139,38 +139,60 @@
     }
     function renderChatHistory(){ if(!chatWindow) return; chatWindow.innerHTML=''; currentInteraction=null; chatHistory.forEach(m=> chatWindow.appendChild(createMessageElement(m))); scrollToBottom(); toggleSendButton(); }
 
+    // STRIKTE WERT-NORMALISIERUNG
     function normalizeDurationValue(v){
-      const s = String(v||'').toLowerCase().replace(',', '.').trim();
+      const s = String(v||'').toLowerCase().replace(/,/g,'.').replace(/\s+/g,' ').trim();
+      // Bereits HH:MM? → direkt
       if (/^\d{1,2}:\d{2}$/.test(s)) return s;
-      if (/^\d+(\.\d+)?\s*h$/.test(s) || /^\d+(\.\d+)?\s*(stunde|stunden)$/.test(s)){
-        const h = parseFloat(s); const hh = Math.floor(h); const mm = Math.round((h-hh)*60);
+      // z.B. "0:30" "1:00" "2:00"
+      const exact = s.match(/^(\d{1,2}):(\d{2})$/);
+      if(exact) return `${exact[1]}:${exact[2]}`;
+      // "1.5h", "1,5 stunden"
+      const hFloat = s.match(/^(\d+(?:\.\d+)?)\s*(?:h|stunde|stunden)$/);
+      if(hFloat){
+        const h = parseFloat(hFloat[1]); const hh = Math.floor(h); const mm = Math.round((h-hh)*60);
         return `${hh}:${mm.toString().padStart(2,'0')}`;
       }
-      if (/^\d+\s*(m|min|minute|minuten)$/.test(s) || /^\d+$/.test(s)){
-        const m = parseInt(s,10); const hh = Math.floor(m/60); const mm = m%60;
+      // "30", "30min", "90 minuten"
+      const mInt = s.match(/^(\d+)\s*(?:m|min|minute|minuten)?$/);
+      if(mInt){
+        const m = parseInt(mInt[1],10); const hh = Math.floor(m/60); const mm = m%60;
         return `${hh}:${mm.toString().padStart(2,'0')}`;
       }
-      return s;
+      console.warn(`[WARN] Dauer-Wert nicht erkannt: "${v}" → Fallback "1:00"`);
+      return "1:00"; // Fallback
     }
     function normalizeReminderValue(v){
       const s = String(v||'').toLowerCase().trim();
-      if (/30\s*(min|minute|minuten)/.test(s)) return "30";
-      if (/1\s*(h|stunde)/.test(s)) return "60";
-      if (/2\s*(h|stunden)/.test(s)) return "120";
-      if (/3\s*(h|stunden)/.test(s)) return "180";
-      const m = s.match(/(\d+)\s*(min|minute|minuten)/); if(m) return String(parseInt(m[1],10));
-      const h = s.match(/(\d+)\s*(h|stunde|stunden)/); if(h) return String(parseInt(h[1],10)*60);
-      return s;
+      if (/30\s*(?:min|minute|minuten)/.test(s)) return "30";
+      if (/1\s*(?:h|stunde)/.test(s)) return "60";
+      if (/2\s*(?:h|stunden)/.test(s)) return "120";
+      if (/3\s*(?:h|stunden)/.test(s)) return "180";
+      const m = s.match(/(\d+)\s*(?:min|minute|minuten)/); if(m) return String(parseInt(m[1],10));
+      const h = s.match(/(\d+)\s*(?:h|stunde|stunden)/); if(h) return String(parseInt(h[1],10)*60);
+      console.warn(`[WARN] Erinnerungs-Wert nicht erkannt: "${v}" → Fallback "60"`);
+      return "60"; // Fallback
     }
     function normalizeOptions(options, type){
-      if(!Array.isArray(options)) return [];
+      if(!Array.isArray(options)){
+        console.error(`[ERROR] options ist kein Array:`, options);
+        return [];
+      }
       return options.map((opt,i)=>{
         let label, value;
-        if (opt && typeof opt === 'object'){ label = opt.label ?? opt.value ?? `Option ${i+1}`; value = opt.value ?? opt.label ?? label; }
-        else { label = (opt ?? `Option ${i+1}`); value = label; }
+        if (opt && typeof opt === 'object'){
+          label = opt.label ?? opt.value ?? `Option ${i+1}`;
+          value = opt.value ?? opt.label ?? label;
+        } else {
+          label = (opt ?? `Option ${i+1}`);
+          value = label;
+        }
         label = String(label); value = String(value);
+        
         if (type === 'DAUER_SELECTION') value = normalizeDurationValue(value);
         if (type === 'REMINDER_SELECTION') value = normalizeReminderValue(value);
+        
+        console.log(`[DEBUG] Option normalisiert: label="${label}", value="${value}"`);
         return { label, value };
       });
     }
@@ -179,6 +201,7 @@
       const type = String(t.interactionType || t.type || '').trim() || 'GENERIC_SELECTION';
       const message = String(t.message || t.prompt || 'Bitte wählen:');
       const options = normalizeOptions(t.options || [], type);
+      console.log(`[DEBUG] Interaction normalisiert: type="${type}", ${options.length} Optionen`);
       return { interactionType: type, message, options };
     }
 
@@ -259,7 +282,7 @@
       let raw = msg.text;
       if(!raw.includes('<INTERACTION>')){ const loose = raw.match(/\{[\s\S]*?"interactionType"[\s\S]*?\}/); if(loose){ raw = raw.replace(loose[0], `<INTERACTION>${loose[0]}</INTERACTION>`); } }
 
-      // NUR ERSTE INTERACTION VERARBEITEN
+      // NUR ERSTE INTERACTION
       const iRx=/<INTERACTION>(.*?)<\/INTERACTION>/s; const iMatch=raw.match(iRx);
       if(msg.sender==='model' && iMatch){
         try{
@@ -277,8 +300,10 @@
             const b=document.createElement('button'); b.type='button'; b.className='interactive-button'; b.textContent = label;
             b.addEventListener('click', async (ev)=>{
               ev.preventDefault(); ev.stopPropagation();
-              console.log(`[DEBUG] Button geklickt: "${label}" → value="${value}"`);
-              b.disabled = true; const snapshot = currentInteraction; currentInteraction = null;
+              console.log(`[CLICK] Button: "${label}" → value="${value}"`);
+              b.disabled = true;
+              const snapshot = currentInteraction;
+              currentInteraction = null;
               addMessageToChat(`(Korrigiert/Ergänzt: ${value})`, 'user');
               await handleChatFlow(`**Interaktive Korrektur/Ergänzung:** Feld (${snapshot?.interactionType}) = **${value}**. Aktualisiere den Termin-Entwurf.`);
             }, { once:true });
@@ -289,14 +314,15 @@
           manualBtn.textContent='Andere (bitte unten eingeben!)';
           manualBtn.addEventListener('click',(ev)=>{
             ev.preventDefault(); ev.stopPropagation();
+            console.log(`[CLICK] Manuelle Eingabe aktiviert`);
             userInput.focus(); userInput.placeholder="Geben Sie hier Ihre manuelle Eingabe ein und drücken Sie 'Senden'.";
             currentInteraction=null; toggleSendButton();
           }, { once:true });
           box.appendChild(manualBtn);
 
           if(box.children.length>0) textEl.appendChild(box);
-          raw = raw.replace(iRx,'').trim(); // Entferne NUR ERSTE INTERACTION
-        }catch(e){ console.error('Interaction JSON parse error', e); }
+          raw = raw.replace(iRx,'').trim();
+        }catch(e){ console.error('[ERROR] Interaction JSON parse error', e); }
       }
 
       if(msg.sender==='model'){ raw = raw.replace(/\{[\s\S]*?\}/g, '').trim(); }
@@ -319,17 +345,54 @@
     async function sendApiRequest(userMessageText, userImageFile=null){
       const currentDate=new Date().toLocaleDateString('de-DE',{year:'numeric',month:'2-digit',day:'2-digit'});
 
-      const systemPrompt=`Sie sind der 'AI Termin-Detektiv'. Das **HEUTIGE DATUM ist: ${currentDate}**. Extrahieren und pflegen Sie Datum (YYYY-MM-DD), Uhrzeit (HH:MM), Dauer (HH:MM), Ort (vollständige Adresse) und Zweck.
+      const systemPrompt=`Sie sind der 'AI Termin-Detektiv'. Das **HEUTIGE DATUM ist: ${currentDate}**.
 
-**KRITISCHE REGEL:** Wenn ein Feld fehlt, liefern Sie **NUR EINEN** <INTERACTION>-Block für **NUR DIESES EINE** fehlende Feld. Niemals mehrere INTERACTION-Blöcke in einer Antwort.
+**STRENGE FORMATREGEL:**
+Wenn ein Feld fehlt, liefern Sie **NUR EINEN** <INTERACTION>-Block mit **GENAU** diesem JSON-Schema:
 
-Priorisierung: Zuerst Datum, dann Uhrzeit, dann Dauer, dann Ort, dann Zweck.
+{
+  "interactionType": "DAUER_SELECTION" oder "ORT_SELECTION" oder "ZWECK_SELECTION" oder "REMINDER_SELECTION",
+  "message": "Kurze deutsche Frage an den Nutzer",
+  "options": [
+    {"label": "Anzeigetext", "value": "Wert im korrekten Format"},
+    ...
+  ]
+}
 
-<INTERACTION>-Format:
-{"interactionType":"...","message":"...","options":[{"label":"...","value":"..."}]}
+**BEISPIELE:**
 
-Für Dauer sind value-Werte strikt HH:MM (z.B. "0:30","1:00","2:00").
-Für Erinnerung sind value-Werte Minuten-Offsets als String (z.B. "30","60","120").`;
+1. Dauer fehlt:
+<INTERACTION>
+{
+  "interactionType": "DAUER_SELECTION",
+  "message": "Bitte wählen Sie die Dauer:",
+  "options": [
+    {"label": "30 Minuten", "value": "0:30"},
+    {"label": "1 Stunde", "value": "1:00"},
+    {"label": "2 Stunden", "value": "2:00"},
+    {"label": "3 Stunden", "value": "3:00"}
+  ]
+}
+</INTERACTION>
+
+2. Ort fehlt:
+<INTERACTION>
+{
+  "interactionType": "ORT_SELECTION",
+  "message": "Bitte wählen Sie die Adresse:",
+  "options": [
+    {"label": "Dr. Weber, Hauptstraße 10, 55128 Mainz-Bretzenheim", "value": "Dr. Weber, Hauptstraße 10, 55128 Mainz-Bretzenheim"},
+    {"label": "Rathaus Bretzenheim, Rathausplatz 1, 55128 Mainz", "value": "Rathaus Bretzenheim, Rathausplatz 1, 55128 Mainz"}
+  ]
+}
+</INTERACTION>
+
+**WICHTIG:**
+- Nur EIN <INTERACTION>-Block pro Antwort.
+- "value" bei Dauer MUSS Format HH:MM haben (z.B. "0:30", "1:00", "2:00").
+- "value" bei Erinnerung MUSS Minuten als String sein (z.B. "30", "60", "120").
+- Priorisierung: Datum → Uhrzeit → Dauer → Ort → Zweck.
+- Wenn alle Felder vorliegen, liefern Sie <EXTRACT>...<DATA>...</DATA></EXTRACT>.`;
 
       const historyForApi = chatHistory.map(m=>({ role:m.sender==='user'?'user':'model', parts:[{ text:m.text }] }));
 
