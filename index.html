@@ -385,7 +385,7 @@
       const currentDate=new Date().toLocaleDateString('de-DE',{year:'numeric',month:'2-digit',day:'2-digit'});
 
       // **AKTUALISIERTER SYSTEM PROMPT**
-      const systemPrompt=`Sie sind der 'AI Termin-Detektiv'. Das **HEUTIGE DATUM ist: ${currentDate}**. Extrahieren und pflegen Sie Datum (YYYY-MM-DD), Uhrzeit (HH:MM), Dauer (HH:MM), Ort (vollständige Adresse) und Zweck. Behalten Sie den Chatverlauf immer im Kontext. Nutzen Sie Google Search, um Adressen von Ärzten, Geschäften oder Orten zu finden.
+      const systemPrompt=`Sie sind der 'AI Termin-Detektiv'. Das **HEUTIGE DATUM ist: [HEUTIGES DATUM]**. Extrahieren und pflegen Sie Datum (YYYY-MM-DD), Uhrzeit (HH:MM), Dauer (HH:MM), Ort (vollständige Adresse) und Zweck. Behalten Sie den Chatverlauf immer im Kontext. Nutzen Sie Google Search, um Adressen von Ärzten, Geschäften oder Orten zu finden.
 Wenn Daten fehlen oder unklar sind, antworten Sie ausschließlich mit einem <INTERACTION>-Block im JSON-Format.
 
 Spezifische Anweisungen für die interaktive Abfrage:
@@ -413,7 +413,7 @@ Wenn alle Hauptfelder (Datum, Uhrzeit, Dauer, Ort, Zweck) vorliegen, liefern Sie
 **Zweck:** Text (formatierter Text)
 <DATA>{"Datum":"YYYY-MM-DD","Uhrzeit":"HH:MM","Dauer":"HH:MM","Ort":"Adresse","Zweck":"Text"}</DATA>
 </EXTRACT>
-**WICHTIG:** Im JSON in <DATA> fehlende Felder als "[FEHLT]" kennzeichnen. **In der formatierten Textausgabe** innerhalb von <EXTRACT> fehlende Felder mit **einem einfachen Bindestrich** ("-") kennzeichnen. Antworten Sie auf Deutsch. Verwenden Sie im Format-Block descriptive/friendly text (z.B. "Dienstag, der 28.10.2025 (Nächsten Dienstag)") und nicht nur die rohen ISO-Werte.`;
+Im JSON in <DATA> fehlende Felder als **"[FEHLT]"** kennzeichnen. Antworten Sie auf Deutsch. Verwenden Sie im Format-Block descriptive/friendly text (z.B. "Dienstag, der 28.10.2025 (Nächsten Dienstag)") und nicht nur die rohen ISO-Werte.
 
 
       // History wird an die API gesendet
@@ -585,3 +585,4 @@ Wenn alle Hauptfelder (Datum, Uhrzeit, Dauer, Ort, Zweck) vorliegen, liefern Sie
   </script>
 </body>
 </html>
+
