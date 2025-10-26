@@ -622,135 +622,135 @@
         if (filename) filename.textContent = '';
     }
 
-    // --- API Kommunikation ---
-    function fileToBase64(file) {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.readAsDataURL(file);
-            reader.onload = () => {
-                const base64String = reader.result.split(',')[1];
-                resolve(base64String);
-            };
-            reader.onerror = error => reject(error);
-        });
-    }
-
-    async function sendApiRequest(userMessageText, userImageFile = null) {
-        const currentDate = new Date().toLocaleDateString('de-DE', { year: 'numeric', month: '2-digit', day: '2-digit' });
-
-        const systemPrompt = `Sie sind der 'AI Termin-Detektiv'. Das **HEUTIGE DATUM ist: ${currentDate}**. Ihre Aufgabe ist es, aus dem Text oder Bild des Benutzers folgende Termininformationen zu extrahieren: Datum (YYYY-MM-DD), Uhrzeit (HH:MM), Dauer (HH:MM), Ort (Vollständige Adresse) und Zweck.
-        
-        Wichtige Anweisungen:
-        1. **Kontext:** Berücksichtigen Sie immer das HEUTIGE DATUM. 'Dienstag' bedeutet den nächsten Dienstag.
-        2. **Extraktion & Kalender-Daten:** Wenn Sie alle Daten (oder den aktuellen Entwurf) haben, senden Sie den Extraktionsblock im folgenden Format:
-           <EXTRACT>
-           **Datum:** YYYY-MM-DD
-           **Uhrzeit:** HH:MM
-           **Dauer:** HH:MM
-           **Ort:** Adresse/Name des Ortes
-           **Zweck:** Beschreibung des Termins
-           <DATA>
-           {"Datum": "YYYY-MM-DD", "Uhrzeit": "HH:MM", "Dauer": "HH:MM", "Ort": "Adresse/Name des Ortes", "Zweck": "Beschreibung"}
-           </DATA>
-           </EXTRACT>
-           Verwenden Sie **immer '[FEHLT]'** als Wert im JSON in **<DATA>**, wenn Daten fehlen (Datum, Uhrzeit, Dauer oder Ort). Verwenden Sie **NIEMALS '[FEHLT]'** in der Anzeige in **<EXTRACT>** (ersetzen Sie es dort durch '-').
-        3. **Interaktion & Google Search:** Wenn Uhrzeit, Dauer oder Ort fehlen, **MÜSSEN** Sie den Benutzer **IMMER** danach fragen.
-           Wenn die Adresse eines Ortes unklar ist (z.B. nur 'Rewe' oder 'Dr. Müller'), **MÜSSEN** Sie das Google Search Tool verwenden, um **mindestens 5 bis maximal 10 spezifische, vollständige Adressen** in der Nähe (falls ein Ort bekannt ist) oder in Deutschland zu finden. Extrahieren Sie die vollständigen Adressen (inkl. Stadt/PLZ) und bieten Sie diese dem Benutzer in einem \`<INTERACTION>\` Block zur Auswahl an.
-           Verwenden Sie hierfür den \`interactionType: 'LOCATION_SELECTION'\`. Die Optionen sollten nur die vollständige Adresse enthalten.
-           Beispieloption: {"label": "Musterstraße 5, 55543 Bad Kreuznach", "value": "Musterstraße 5, 55543 Bad Kreuznach"}
-           Wenn Sie eine Information **NICHT** eindeutig klären oder ergänzen können, **MUSS** Ihre gesamte Antwort NUR den **<INTERACTION> Block** enthalten, gefolgt von der JSON-Struktur.
-           Bieten Sie für die Dauer immer Optionen wie "30 Minuten", "1 Stunde" und "2 Stunden" an.
-        4. Antworten Sie immer auf Deutsch.`;
-        
-        const historyForApi = chatHistory
-            .slice(-8)
-            .map(msg => ({ 
-                role: msg.sender === 'user' ? 'user' : 'model', 
-                parts: [{ text: msg.text }] 
-            }));
-
-        let currentRequestParts = [{ text: userMessageText }];
-
-        if (userImageFile) {
-            try {
-                const base64Data = await fileToBase64(userImageFile);
-                currentRequestParts = [
-                    { text: `Analysiere das angehängte Bild und den Text ("${userMessageText}") und extrahiere/korrigiere die Termindaten.` },
-                    {
-                        inlineData: {
-                            mimeType: userImageFile.type,
-                            data: base64Data
-                        }
-                    }
-                ];
-            } catch (e) {
-                console.error("Fehler beim Konvertieren des Bildes:", e);
-                return { text: "Ein Fehler ist beim Hochladen des Bildes aufgetreten.", type: 'error' };
-            }
-        }
-        
-        const payload = {
-            contents: [...historyForApi, { role: 'user', parts: currentRequestParts }],
-            tools: [{ "google_search": {} }],
-            systemInstruction: { parts: [{ text: systemPrompt }] },
+ // --- API Kommunikation ---
+function fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => {
+            const base64String = reader.result.split(',')[1];
+            resolve(base64String);
         };
+        reader.onerror = error => reject(error);
+    });
+}
 
-        const maxRetries = 3;
-        let lastError = null;
-        
-        for (let attempt = 0; attempt < maxRetries; attempt++) {
-            try {
-                // KORRIGIERT: API-Key im Header senden
-                const headers = {
-                    'Content-Type': 'application/json'
-                };
-                
-                if (GEMINI_API_KEY) {
-                    headers['x-goog-api-key'] = GEMINI_API_KEY;
-                }
-                
-                console.log('Sende API-Request (Versuch ' + (attempt + 1) + ')...');
-                
-                const response = await fetch(API_URL, {
-                    method: 'POST',
-                    headers: headers,
-                    body: JSON.stringify(payload)
-                });
+async function sendApiRequest(userMessageText, userImageFile = null) {
+    const currentDate = new Date().toLocaleDateString('de-DE', { year: 'numeric', month: '2-digit', day: '2-digit' });
 
-                if (response.status === 429 || response.status >= 500) {
-                    const delay = Math.pow(2, attempt) * 1000 + Math.random() * 1000;
-                    lastError = `Gemini Serverfehler oder Rate Limit (Status ${response.status}).`;
-                    if (attempt < maxRetries - 1) {
-                        console.log(`Retry ${attempt + 1} nach ${delay}ms...`);
-                        await new Promise(resolve => setTimeout(resolve, delay));
-                        continue;
+    const systemPrompt = `Sie sind der 'AI Termin-Detektiv'. Das **HEUTIGE DATUM ist: ${currentDate}**. Ihre Aufgabe ist es, aus dem Text oder Bild des Benutzers folgende Termininformationen zu extrahieren: Datum (YYYY-MM-DD), Uhrzeit (HH:MM), Dauer (HH:MM), Ort (Vollständige Adresse) und Zweck.
+    
+    Wichtige Anweisungen:
+    1. **Kontext:** Berücksichtigen Sie immer das HEUTIGE DATUM. 'Dienstag' bedeutet den nächsten Dienstag.
+    2. **Extraktion & Kalender-Daten:** Wenn Sie alle Daten (oder den aktuellen Entwurf) haben, senden Sie den Extraktionsblock im folgenden Format:
+       <EXTRACT>
+       **Datum:** YYYY-MM-DD
+       **Uhrzeit:** HH:MM
+       **Dauer:** HH:MM
+       **Ort:** Adresse/Name des Ortes
+       **Zweck:** Beschreibung des Termins
+       <DATA>
+       {"Datum": "YYYY-MM-DD", "Uhrzeit": "HH:MM", "Dauer": "HH:MM", "Ort": "Adresse/Name des Ortes", "Zweck": "Beschreibung"}
+       </DATA>
+       </EXTRACT>
+       Verwenden Sie **immer '[FEHLT]'** als Wert im JSON in **<DATA>**, wenn Daten fehlen (Datum, Uhrzeit, Dauer oder Ort). Verwenden Sie **NIEMALS '[FEHLT]'** in der Anzeige in **<EXTRACT>** (ersetzen Sie es dort durch '-').
+    3. **Interaktion & Google Search:** Wenn Uhrzeit, Dauer oder Ort fehlen, **MÜSSEN** Sie den Benutzer **IMMER** danach fragen.
+       Wenn die Adresse eines Ortes unklar ist (z.B. nur 'Rewe' oder 'Dr. Müller'), **MÜSSEN** Sie das Google Search Tool verwenden, um **mindestens 5 bis maximal 10 spezifische, vollständige Adressen** in der Nähe (falls ein Ort bekannt ist) oder in Deutschland zu finden. Extrahieren Sie die vollständigen Adressen (inkl. Stadt/PLZ) und bieten Sie diese dem Benutzer in einem \`<INTERACTION>\` Block zur Auswahl an.
+       Verwenden Sie hierfür den \`interactionType: 'LOCATION_SELECTION'\`. Die Optionen sollten nur die vollständige Adresse enthalten.
+       Beispieloption: {"label": "Musterstraße 5, 55543 Bad Kreuznach", "value": "Musterstraße 5, 55543 Bad Kreuznach"}
+       Wenn Sie eine Information **NICHT** eindeutig klären oder ergänzen können, **MUSS** Ihre gesamte Antwort NUR den **<INTERACTION> Block** enthalten, gefolgt von der JSON-Struktur.
+       Bieten Sie für die Dauer immer Optionen wie "30 Minuten", "1 Stunde" und "2 Stunden" an.
+    4. Antworten Sie immer auf Deutsch.`;
+    
+    const historyForApi = chatHistory
+        .slice(-8)
+        .map(msg => ({ 
+            role: msg.sender === 'user' ? 'user' : 'model', 
+            parts: [{ text: msg.text }] 
+        }));
+
+    let currentRequestParts = [{ text: userMessageText }];
+
+    if (userImageFile) {
+        try {
+            const base64Data = await fileToBase64(userImageFile);
+            currentRequestParts = [
+                { text: `Analysiere das angehängte Bild und den Text ("${userMessageText}") und extrahiere/korrigiere die Termindaten.` },
+                {
+                    inlineData: {
+                        mimeType: userImageFile.type,
+                        data: base64Data
                     }
-                } else if (!response.ok) {
-                    const errorData = await response.json().catch(() => ({ error: { message: response.statusText } }));
-                    const errorMessage = errorData.error ? errorData.error.message : response.statusText;
-                    lastError = `**API-Fehler (${response.status})** - ${errorMessage}.`;
-                    console.error('API-Fehler:', errorData);
-                } else {
-                    const result = await response.json();
-                    const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
-
-                    if (!text) {
-                        lastError = "Die API gab eine leere oder ungültige Antwort zurück.";
-                        continue;
-                    }
-                    console.log('API-Request erfolgreich!');
-                    return { text: text, type: 'success' };
                 }
-
-            } catch (error) {
-                console.error("Netzwerkfehler oder allgemeiner Fehler:", error);
-                lastError = `Ein Netzwerkfehler ist aufgetreten: ${error.message}`;
-            }
+            ];
+        } catch (e) {
+            console.error("Fehler beim Konvertieren des Bildes:", e);
+            return { text: "Ein Fehler ist beim Hochladen des Bildes aufgetreten.", type: 'error' };
         }
-        
-        return { text: lastError || "Unbekannter Fehler nach allen Versuchen.", type: 'error' };
     }
+    
+    const payload = {
+        contents: [...historyForApi, { role: 'user', parts: currentRequestParts }],
+        tools: [{ "google_search": {} }],
+        systemInstruction: { parts: [{ text: systemPrompt }] },
+    };
 
+    // 🔑 Korrekte API-URL mit Schlüssel als Query-Parameter (KEINE LEERZEICHEN!)
+    const BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent";
+    const GEMINI_API_KEY = "AIzaSyD_DevrmddfF5bmXiQUbvbwQpS0HGEgfOY";
+    const API_URL = `${BASE_URL}?key=${encodeURIComponent(GEMINI_API_KEY)}`;
+
+    const maxRetries = 3;
+    let lastError = null;
+    
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+        try {
+            // ✅ Kein x-goog-api-key Header – nur Content-Type
+            const headers = {
+                'Content-Type': 'application/json'
+            };
+            
+            console.log('Sende API-Request (Versuch ' + (attempt + 1) + ')...');
+            
+            const response = await fetch(API_URL, {
+                method: 'POST',
+                headers: headers,
+                body: JSON.stringify(payload)
+            });
+
+            if (response.status === 429 || response.status >= 500) {
+                const delay = Math.pow(2, attempt) * 1000 + Math.random() * 1000;
+                lastError = `Gemini Serverfehler oder Rate Limit (Status ${response.status}).`;
+                if (attempt < maxRetries - 1) {
+                    console.log(`Retry ${attempt + 1} nach ${delay}ms...`);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    continue;
+                }
+            } else if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ error: { message: response.statusText } }));
+                const errorMessage = errorData.error ? errorData.error.message : response.statusText;
+                lastError = `**API-Fehler (${response.status})** - ${errorMessage}.`;
+                console.error('API-Fehler:', errorData);
+            } else {
+                const result = await response.json();
+                const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+
+                if (!text) {
+                    lastError = "Die API gab eine leere oder ungültige Antwort zurück.";
+                    continue;
+                }
+                console.log('API-Request erfolgreich!');
+                return { text: text, type: 'success' };
+            }
+
+        } catch (error) {
+            console.error("Netzwerkfehler oder allgemeiner Fehler:", error);
+            lastError = `Ein Netzwerkfehler ist aufgetreten: ${error.message}`;
+        }
+    }
+    
+    return { text: lastError || "Unbekannter Fehler nach allen Versuchen.", type: 'error' };
+}
     async function handleChatFlow(userMessageText, userImageFile = null) {
         showLoading();
         userInput.disabled = true;
