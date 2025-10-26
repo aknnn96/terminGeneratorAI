@@ -181,4 +181,270 @@
       const rx=/<EXTRACT>(.*?)<DATA>(.*?)<\/DATA><\/EXTRACT>/s; const m=t.match(rx);
       if(m){
         const extraction=m[1].trim(); const rawJson=m[2].trim();
-        const pre=t.substring(0,m.index).trim().replace(/\n/g,'<br>'); const post=t.substring(m.index+m[0].
+        const pre=t.substring(0,m.index).trim().replace(/\n/g,'<br>'); const post=t.substring(m.index+m[0].length).trim().replace(/\n/g,'<br>');
+        let html=pre.replace(/<br>$/,'');
+        let data=null; try{ data=JSON.parse(rawJson); }catch(e){ console.error('DATA parse error', e); }
+        const block=document.createElement('div'); block.className='extraction-block';
+        const content=extraction.replace(/\[FEHLT\]/g,'-').replace(/<br>/g,'\n').split('\n').filter(l=>l.trim().length>0).map(l=>`<div>${l}</div>`).join('');
+        block.innerHTML=`<strong>Termin-Details:</strong><br>`+content;
+
+        const ready = data && data.Datum && !data.Datum.includes('[FEHLT]') && data.Dauer && !data.Dauer.includes('[FEHLT]');
+        if(ready){
+          const actions=document.createElement('div'); actions.className='calendar-actions';
+          const g=document.createElement('a'); g.href=createGoogleCalendarLink(data); g.target='_blank'; g.className='calendar-button google-button';
+          g.innerHTML=`<span class="material-icons" style="font-size:18px;line-height:1;">event_available</span><span>Zum Google Kalender hinzufügen</span>`;
+          const icsBtn=document.createElement('button'); icsBtn.className='calendar-button ics-button';
+          icsBtn.innerHTML=`<span class="material-icons" style="font-size:18px;line-height:1;">download</span><span>ICS-Datei herunterladen</span>`;
+          icsBtn.onclick=()=>downloadICS(createICSContent(data));
+          actions.appendChild(g); actions.appendChild(icsBtn); block.appendChild(actions);
+        } else if (data) {
+          const hint=document.createElement('p'); hint.className='text-sm text-gray-500 mt-3 border-t border-gray-200 pt-3';
+          hint.innerHTML='Bitte vervollständigen Sie die fehlenden Felder, um Kalender-Aktionen zu aktivieren.';
+          block.appendChild(hint);
+        }
+
+        const container=document.createElement('div'); container.appendChild(block); html+=container.innerHTML;
+        if(post) html+='<br>'+post;
+        t=html;
+      }
+      return t.replace(/\n/g,'<br>');
+    }
+
+    function createMessageElement(msg){
+      const row=document.createElement('div'); row.className=`message-row ${msg.sender==='user'?'user-message-row':'bot-message-row'}`;
+      const cont=document.createElement('div'); cont.className='message-content';
+
+      if(msg.imageUrl){ const img=document.createElement('img'); img.src=msg.imageUrl; img.alt='Vom Nutzer hochgeladenes Bild'; img.className='w-full max-h-64 object-contain rounded-xl mb-2 shadow-md'; cont.appendChild(img); }
+
+      const textEl=document.createElement('div'); textEl.className=`message ${msg.sender==='user'?'user-message':'bot-message'}`;
+
+      if(msg.sender==='model'){ currentInteraction=null; }
+
+      let raw = msg.text;
+
+      if(!raw.includes('<INTERACTION>')){
+        const loose = raw.match(/\{[\s\S]*"interactionType"[\s\S]*\}/);
+        if(loose){ raw = raw.replace(loose[0], `<INTERACTION>${loose[0]}</INTERACTION>`); }
+      }
+
+      const iRx=/<INTERACTION>(.*?)<\/INTERACTION>/s; const iMatch=raw.match(iRx);
+      if(msg.sender==='model' && iMatch){
+        try{
+          const data=JSON.parse(iMatch[1].trim());
+          const prompt=data.message || data.prompt || 'Bitte wählen:';
+          currentInteraction=data;
+          textEl.innerHTML = formatMarkdownToHtml(prompt) + '<br>';
+
+          const box=document.createElement('div'); box.className='interactive-buttons';
+          if(Array.isArray(data.options)){
+            data.options.forEach(opt=>{
+              const b=document.createElement('button');
+              b.type='button'; b.className='interactive-button';
+              b.textContent = opt.label || String(opt.value);
+              b.onclick = () => handleInteractiveResponse(opt.value ?? opt.label);
+              box.appendChild(b);
+            });
+          }
+          if(data.allowManualInput){
+            const manual=document.createElement('input'); manual.id='interactiveInput'; manual.type='text'; manual.placeholder=data.inputPlaceholder||'Direkte Eingabe hier...';
+            manual.onkeydown=(e)=>{ if(e.key==='Enter'){ e.preventDefault(); if(manual.value.trim()) handleInteractiveResponse(manual.value.trim()); } };
+            box.appendChild(manual);
+          }
+          textEl.appendChild(box);
+          raw = raw.replace(iRx,'').trim();
+        }catch(e){ console.error('Interaction JSON parse error', e); }
+      }
+
+      if(raw.length>0){ textEl.innerHTML += formatMarkdownToHtml(raw); }
+
+      cont.appendChild(textEl); row.appendChild(cont);
+      return row;
+    }
+
+    function addMessageToChat(text, sender, imageUrl=null){
+      const data={ text, sender, imageUrl };
+      chatHistory.push(data);
+      chatWindow.appendChild(createMessageElement(data));
+      saveChatHistory();
+      scrollToBottom();
+      return data;
+    }
+
+    function showLoading(){ if(loadingIndicator){ loadingIndicator.classList.remove('hidden'); scrollToBottom(); } }
+    function hideLoading(){ if(loadingIndicator){ loadingIndicator.classList.add('hidden'); } }
+
+    function resetImageUpload(){
+      currentImageFile=null; if(fileInput) fileInput.value=''; if(imagePreviewContainer) imagePreviewContainer.classList.add('hidden');
+      const p=document.getElementById('image-preview'); const f=document.getElementById('image-filename'); if(p) p.src=''; if(f) f.textContent='';
+    }
+    function fileToBase64(file){ return new Promise((res,rej)=>{ const r=new FileReader(); r.readAsDataURL(file); r.onload=()=>res(r.result.split(',')[1]); r.onerror=e=>rej(e); }); }
+
+    async function sendApiRequest(userMessageText, userImageFile=null){
+      const currentDate=new Date().toLocaleDateString('de-DE',{year:'numeric',month:'2-digit',day:'2-digit'});
+
+      const systemPrompt=`Sie sind der 'AI Termin-Detektiv'. Das **HEUTIGE DATUM ist: ${currentDate}**. Extrahieren Sie Datum (YYYY-MM-DD), Uhrzeit (HH:MM), Dauer (HH:MM), Ort (vollständige Adresse) und Zweck.
+Wenn Daten fehlen, antworten Sie ausschließlich mit einem <INTERACTION>-Block im JSON-Format (z. B. {"interactionType":"DURATION_SELECTION","message":"Bitte wählen ...","options":[...]}).
+Wenn alle Felder vorliegen, liefern Sie zusätzlich:
+<EXTRACT>
+**Datum:** YYYY-MM-DD
+**Uhrzeit:** HH:MM
+**Dauer:** HH:MM
+**Ort:** Adresse
+**Zweck:** Text
+<DATA>{"Datum":"YYYY-MM-DD","Uhrzeit":"HH:MM","Dauer":"HH:MM","Ort":"Adresse","Zweck":"Text"}</DATA>
+</EXTRACT>
+Im JSON in <DATA> fehlende Felder als "[FEHLT]" kennzeichnen; in der Anzeige stattdessen "-". Antworten Sie auf Deutsch.`;
+
+      const historyForApi = chatHistory.slice(-8).map(m=>({ role:m.sender==='user'?'user':'model', parts:[{ text:m.text }] }));
+
+      let parts=[{ text:userMessageText }];
+      if(userImageFile){
+        try{
+          const base64=await fileToBase64(userImageFile);
+          parts=[
+            { text:`Analysiere das angehängte Bild und den Text ("${userMessageText}") und extrahiere/korrigiere die Termindaten.` },
+            { inlineData:{ mimeType:userImageFile.type, data:base64 } }
+          ];
+        }catch{ return { text:"Ein Fehler ist beim Hochladen des Bildes aufgetreten.", type:'error' }; }
+      }
+
+      const payload = { contents:[...historyForApi, { role:'user', parts }], tools:[{ "google_search":{} }], systemInstruction:{ parts:[{ text: systemPrompt }] } };
+
+      const resp = await fetch(API_ENDPOINT, {
+        method:'POST',
+        headers:{ 'Content-Type':'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      // Robust gegen Text- oder JSON-Antworten
+      const ct = resp.headers.get('content-type') || '';
+      let data, raw;
+      if (ct.includes('application/json')) data = await resp.json().catch(()=>null);
+      else raw = await resp.text().catch(()=>'');
+
+      if(!resp.ok){
+        const msg = data?.error?.message || raw || resp.statusText;
+        return { text: `**API-Fehler (${resp.status})** - ${msg}.`, type:'error' };
+      }
+
+      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || raw || "Keine Antwort erhalten.";
+      return { text, type:'success' };
+    }
+
+    async function handleChatFlow(userMessageText, userImageFile=null){
+      showLoading();
+      userInput.disabled = true;
+      try{
+        const response = await sendApiRequest(userMessageText, userImageFile);
+        addMessageToChat(response.text, 'model');
+      } finally {
+        hideLoading();
+        userInput.disabled = false;
+        toggleSendButton();
+      }
+    }
+
+    async function sendMessage(){
+      const text = userInput.value.trim();
+      const imageFile = currentImageFile;
+      if(!text && !imageFile) return;
+
+      const userImageUrl = imageFile ? URL.createObjectURL(imageFile) : null;
+      sendButton.disabled = true;
+      addMessageToChat(text, 'user', userImageUrl);
+
+      userInput.value = '';
+      userInput.style.height = 'auto';
+      resetImageUpload();
+      toggleSendButton();
+
+      await handleChatFlow(text, imageFile);
+    }
+
+    async function handleInteractiveResponse(value){
+      if(!currentInteraction) return;
+      const interaction = currentInteraction;
+
+      addMessageToChat(`(Korrigiert/Ergänzt: ${value})`, 'user');
+
+      currentInteraction = null;
+      userInput.disabled = false;
+      toggleSendButton();
+
+      const msg = `**Interaktive Korrektur:** Feld (${interaction.interactionType}) = **${value}**. Aktualisiere den Termin-Entwurf.`;
+      await handleChatFlow(msg);
+    }
+
+    function initializeChat(){
+      chatWindow = document.getElementById('chatWindow');
+      userInput = document.getElementById('userInput');
+      sendButton = document.getElementById('sendButton');
+      downloadChatButton = document.getElementById('downloadChatButton');
+      fileInput = document.getElementById('fileInput');
+      imagePreviewContainer = document.getElementById('imagePreviewContainer');
+      loadingIndicator = document.getElementById('loadingIndicator');
+
+      if(!chatWindow || !userInput || !sendButton){ console.error('FEHLER: Kritische DOM-Elemente fehlen!'); return; }
+
+      currentInteraction = null;
+      currentImageFile = null;
+      userInput.value = '';
+      sendButton.disabled = true;
+      userInput.disabled = false;
+
+      loadChatHistory();
+
+      if(chatHistory.length===0){
+        const welcome = "Willkommen beim **AI Termin-Detektiv**! Das heutige Datum ist der **" + new Date().toLocaleDateString('de-DE') + "**. Senden Sie Text, einen Screenshot oder ein Foto; fehlende Details werden interaktiv abgefragt.";
+        addMessageToChat(welcome, 'model');
+      }
+
+      userInput.addEventListener('input', ()=>{
+        userInput.style.height='auto';
+        userInput.style.height=userInput.scrollHeight+'px';
+        toggleSendButton();
+      });
+      userInput.addEventListener('keydown', (e)=>{
+        if(e.key==='Enter' && !e.shiftKey){
+          e.preventDefault();
+          if(!sendButton.disabled){ sendMessage(); }
+        }
+      });
+
+      fileInput.addEventListener('change', (e)=>{
+        const file=e.target.files[0];
+        if(file && file.type.startsWith('image/')){
+          currentImageFile=file;
+          document.getElementById('image-preview').src=URL.createObjectURL(file);
+          document.getElementById('image-filename').textContent=file.name;
+          imagePreviewContainer.classList.remove('hidden');
+        } else {
+          resetImageUpload();
+        }
+        toggleSendButton();
+      });
+      document.getElementById('cancel-upload').addEventListener('click', ()=>{
+        resetImageUpload();
+        toggleSendButton();
+      });
+
+      sendButton.addEventListener('click', sendMessage);
+
+      downloadChatButton.addEventListener('click', ()=>{
+        const chatText = chatHistory.map(m => `${m.sender.toUpperCase()}: ${m.text}`).join('\n\n');
+        const blob = new Blob([chatText], { type:'text/plain;charset=utf-8' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `chat_export_${Date.now()}.txt`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      });
+
+      toggleSendButton();
+    }
+
+    if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded', initializeChat); } else { initializeChat(); }
+  </script>
+</body>
+</html>
