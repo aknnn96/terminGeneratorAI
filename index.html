@@ -355,7 +355,7 @@ Im JSON in <DATA> fehlende Felder als "[FEHLT]" kennzeichnen; in der Anzeige sta
       if(!text && !imageFile) return;
 
       const userImageUrl = imageFile ? URL.createObjectURL(imageFile) : null;
-      sendButton.disabled = true;
+      sendButton.disabled = false;
       addMessageToChat(text || "(Bild gesendet)", 'user', userImageUrl);
 
       userInput.value = '';
@@ -455,5 +455,6 @@ Im JSON in <DATA> fehlende Felder als "[FEHLT]" kennzeichnen; in der Anzeige sta
   </script>
 </body>
 </html>
+
 
 
