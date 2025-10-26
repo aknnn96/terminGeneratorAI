@@ -1,25 +1,28 @@
 // netlify/functions/gemini.js
-import fetch from 'node-fetch';
-
-const API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent";
-
 export default async (req, res) => {
-  if (req.method === 'OPTIONS') {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-    return res.status(204).end();
-  }
+  // CORS
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  if (req.method === 'OPTIONS') return res.status(204).end();
 
   try {
     const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      return res.status(500).json({ error: { message: 'Server misconfigured: GEMINI_API_KEY missing' } });
+    if (!apiKey) return res.status(500).json({ error: { message: 'GEMINI_API_KEY missing' } });
+
+    // Body robust einlesen (je nach Runtime)
+    let payload;
+    if (typeof req.body === 'object') payload = req.body;
+    else if (typeof req.body === 'string' && req.body.length) payload = JSON.parse(req.body);
+    else {
+      const chunks = [];
+      for await (const chunk of req) chunks.push(chunk);
+      const raw = Buffer.concat(chunks).toString('utf8');
+      payload = raw ? JSON.parse(raw) : {};
     }
 
-    const payload = req.body && typeof req.body === 'object' ? req.body : JSON.parse(req.body || '{}');
-
-    const response = await fetch(API_URL, {
+    const API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent";
+    const upstream = await fetch(API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -28,11 +31,9 @@ export default async (req, res) => {
       body: JSON.stringify(payload)
     });
 
-    const text = await response.text();
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.status(response.status).send(text);
+    const text = await upstream.text();
+    return res.status(upstream.status).send(text);
   } catch (e) {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.status(500).json({ error: { message: e.message } });
+    return res.status(502).json({ error: { message: e.message } });
   }
 };
