@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>AI Termin-Detektiv Interaktiv V17.0 (Robustheits-Fix)</title>
+  <title>AI Termin-Detektiv Interaktiv V18.0 (Final Fix)</title>
 
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
@@ -49,9 +49,17 @@
         padding-left: 1rem;
         padding-right: 1rem;
     }
+    /* FIX V18.0: Visual für manuellen Input als grauer Hint */
     .interactive-button.manual-input {
-      background:#6B7280; 
+      background:#F3F4F6; /* Very Light Grey */
+      color: #4B5563; /* Darker Text */
+      border: 1px dashed #9CA3AF; /* Dashed Border */
+      box-shadow: none; /* No shadow */
       flex-basis: 100%;
+    }
+    .interactive-button.manual-input:hover { 
+      background:#E5E7EB; /* Slightly darker hover */
+      color: #1F2937;
     }
     .interactive-button:hover { background:#059669; }
     .interactive-button:active { transform:scale(0.99); }
@@ -220,7 +228,6 @@
       const text=userInput.value.trim(); const hasImage=currentImageFile!==null; const hasInput=Boolean(text)||hasImage; 
       
       sendButton.disabled=!hasInput; 
-      // Input ist NICHT disabled, da wir manuelle Eingabe auch bei Interaktion erlauben.
       userInput.disabled=false; 
       
       userInput.placeholder=currentInteraction?'Bitte geben Sie hier Ihre Korrektur/Antwort ein oder wählen Sie oben eine Option...':'Termin-Details eingeben...';
@@ -314,13 +321,14 @@
           
           if(Array.isArray(data.options)){
             data.options.forEach(opt=>{
-              // **ROBUSTHEITS-FIX:** Prüft auf Existenz, nutzt Value, Label oder Fallback.
+              // ROBUSTHEITS-FIX: Prüft auf Existenz, nutzt Value, Label oder Fallback.
               const label = (opt && opt.label) ? opt.label : (opt && opt.value) ? String(opt.value) : 'Option wählen';
               const value = (opt && opt.value !== undefined) ? opt.value : (opt && opt.label) ? opt.label : label;
 
               const b=document.createElement('button');
               b.type='button'; b.className='interactive-button';
               b.textContent = label;
+              // FIX V18.0: Click-Handler ist hier, stellt sicher, dass Value gesendet wird.
               b.onclick = () => handleInteractiveResponse(value); 
               box.appendChild(b);
             });
@@ -330,18 +338,19 @@
           let manualButtonText = null;
 
           if(data.interactionType === 'ORT_SELECTION'){
-              manualButtonText = 'Anderen Ort/Adresse eingeben';
+              manualButtonText = 'Anderer Ort/Adresse: Bitte unten eingeben';
           } else if (data.interactionType === 'DAUER_SELECTION'){
-              manualButtonText = 'Andere Dauer eingeben (z.B. 1:45)';
+              manualButtonText = 'Andere Dauer (z.B. 1:45): Bitte unten eingeben';
           } else if (data.interactionType === 'ZWECK_SELECTION'){
-              manualButtonText = 'Anderen Zweck eingeben';
+              manualButtonText = 'Anderer Zweck: Bitte unten eingeben';
           } else if (data.interactionType === 'REMINDER_SELECTION'){
-              manualButtonText = 'Eigene Erinnerungszeit eingeben';
+              manualButtonText = 'Eigene Erinnerungszeit: Bitte unten eingeben';
           }
 
           if(manualButtonText){
               const manualInputButton = document.createElement('button');
               manualInputButton.type = 'button';
+              // FIX V18.0: Neue CSS-Klasse für das Aussehen als Hinweis
               manualInputButton.className = 'interactive-button manual-input'; 
               manualInputButton.textContent = manualButtonText;
               manualInputButton.onclick = () => { 
@@ -352,12 +361,17 @@
               box.appendChild(manualInputButton); 
           }
           
-          if(box.children.length > 0){ // Zeige den Button-Container nur an, wenn Optionen oder ein Manual-Button existieren
+          if(box.children.length > 0){
               textEl.appendChild(box); 
           }
           
           raw = raw.replace(iRx,'').trim();
         }catch(e){ console.error('Interaction JSON parse error', e); }
+      }
+
+      // FIX V18.0: Aggressiv alle verbleibenden JSON-Strukturen (wie das {..} unter dem Zweck) entfernen
+      if(msg.sender==='model'){
+          raw = raw.replace(/\{[\s\S]*\}/g, '').trim(); 
       }
 
       if(raw.length>0){ textEl.innerHTML += formatMarkdownToHtml(raw); }
@@ -387,7 +401,7 @@
     async function sendApiRequest(userMessageText, userImageFile=null){
       const currentDate=new Date().toLocaleDateString('de-DE',{year:'numeric',month:'2-digit',day:'2-digit'});
 
-      // **KORRIGIERTER SYSTEM PROMPT** (Ausführlich und mit allen Interaktions-Details)
+      // SYSTEM PROMPT
       const systemPrompt=`Sie sind der 'AI Termin-Detektiv'. Das **HEUTIGE DATUM ist: ${currentDate}**. Extrahieren und pflegen Sie Datum (YYYY-MM-DD), Uhrzeit (HH:MM), Dauer (HH:MM), Ort (vollständige Adresse) und Zweck. Behalten Sie den Chatverlauf immer im Kontext. Nutzen Sie Google Search, um Adressen von Ärzten, Geschäften oder Orten zu finden.
 Wenn Daten fehlen oder unklar sind, antworten Sie ausschließlich mit einem <INTERACTION>-Block im JSON-Format.
 
@@ -496,7 +510,8 @@ Wenn alle Hauptfelder (Datum, Uhrzeit, Dauer, Ort, Zweck) vorliegen, liefern Sie
 
     async function handleInteractiveResponse(value){
       if(!currentInteraction) return;
-      const v = String(value||"").trim();
+      // FIX V18.0: Sicherstellen, dass der Wert als String verarbeitet wird
+      const v = String(value||"").trim(); 
       if(!v) return;
 
       const interaction = currentInteraction;
