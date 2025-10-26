@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>AI Termin-Detektiv Interaktiv V9.0 (Final Fix)</title>
+  <title>AI Termin-Detektiv Interaktiv V16.0 (Button Fix)</title>
 
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
@@ -33,28 +33,35 @@
     .loading-dots div:nth-child(3){ animation-delay:0.4s; }
     @keyframes bounce { from{ transform:translateY(0);} to{ transform:translateY(-5px);} }
 
-    /* WIEDERHERGESTELLTE FLEXIBLE BUTTONS */
+    /* Fix: Flexible Button-Anordnung für kleine Optionen (Dauer, Erinnerung) */
     .interactive-buttons { display:flex; flex-wrap:wrap; gap:8px; margin-top:1rem; padding-top:0.5rem; } 
+
+    /* Standard Button-Layout (für 3er-Anordnung bei Dauer) */
     .interactive-button {
       display:flex; align-items:center; justify-content:center; gap:8px; 
       background:#10B981; color:#fff; padding:10px 14px; border-radius:0.75rem; font-size:0.9rem; font-weight:600;
       cursor:pointer; transition:background-color .2s, transform .05s; box-shadow:0 1px 3px rgba(0,0,0,0.15);
-      flex-basis: calc(33.333% - 8px); /* Für Dauer/Erinnerung: 3 Buttons pro Zeile */
+      flex-basis: calc(33.333% - 8px); 
       min-width: 120px;
+      text-align: center; /* Bei kurzen Labels */
     }
-    .interactive-button.manual-input {
-      background:#6B7280; 
-      flex-basis: 100%; /* Manueller Button volle Breite */
-    }
-    .interactive-button:hover { background:#059669; }
-    .interactive-button:active { transform:scale(0.99); }
-
-    /* Fix für Adress-Optionen (die volle Breite benötigen) */
+    
+    /* Layout-Override: Volle Breite für Adress-Optionen */
     .interactive-buttons.full-width-options .interactive-button {
         flex-basis: 100%;
         text-align: left;
         justify-content: flex-start;
+        padding-left: 1rem;
+        padding-right: 1rem;
     }
+
+    .interactive-button.manual-input {
+      background:#6B7280; 
+      flex-basis: 100%; /* Manueller Button volle Breite */
+    }
+
+    .interactive-button:hover { background:#059669; }
+    .interactive-button:active { transform:scale(0.99); }
 
 
     .calendar-actions { display:flex; flex-direction:column; gap:8px; margin-top:1rem; padding-top:1rem; border-top:1px dashed #D1D5DB; }
@@ -221,7 +228,7 @@
       const text=userInput.value.trim(); const hasImage=currentImageFile!==null; const hasInput=Boolean(text)||hasImage; 
       
       sendButton.disabled=!hasInput; 
-      // Input ist immer aktiv, aber der Placeholder ändert sich bei Interaktion
+      // Input ist NICHT disabled, da wir manuelle Eingabe auch bei Interaktion erlauben.
       userInput.disabled=false; 
       
       userInput.placeholder=currentInteraction?'Bitte geben Sie hier Ihre Korrektur/Antwort ein oder wählen Sie oben eine Option...':'Termin-Details eingeben...';
@@ -252,7 +259,7 @@
         
         const block=document.createElement('div'); block.className='extraction-block';
         
-        // **WICHTIG:** Ersetzt [FEHLT] durch - für die Anzeige (Falls das Modell die Anweisung ignoriert und [FEHLT] im Extraction Block ausgibt)
+        // **WICHTIG:** Ersetzt [FEHLT] durch - für die Anzeige
         const content=extraction.replace(/\[FEHLT\]/g,'-').replace(/<br>/g,'\n').split('\n').filter(l=>l.trim().length>0).map(l=>`<div>${l}</div>`).join('');
         block.innerHTML=`<strong>Termin-Details:</strong><br>`+content;
 
@@ -290,6 +297,7 @@
 
       let raw = msg.text;
 
+      // Ensure <INTERACTION> tags are present
       if(!raw.includes('<INTERACTION>')){
         const loose = raw.match(/\{[\s\S]*"interactionType"[\s\S]*\}/);
         if(loose){ raw = raw.replace(loose[0], `<INTERACTION>${loose[0]}</INTERACTION>`); }
@@ -307,16 +315,16 @@
           const box=document.createElement('div'); 
           box.className='interactive-buttons';
 
-          // Zusätzliche Klasse für die Adress-Optionen, damit sie volle Breite bekommen
+          // Setze spezielle CSS-Klasse für Adress-Optionen
           if(data.interactionType === 'ORT_SELECTION' || data.interactionType === 'ZWECK_SELECTION'){
               box.classList.add('full-width-options');
           }
           
           if(Array.isArray(data.options)){
             data.options.forEach(opt=>{
-              // Button-Fix: Verwende Label ODER Value, um undefined zu vermeiden
-              const label = opt && (opt.label || opt.value) ? (opt.label || String(opt.value)) : 'Option wählen';
-              const value = opt && (opt.value ?? opt.label) ? (opt.value ?? opt.label) : label;
+              // **WICHTIGER FIX:** Prüft auf Existenz, nutzt Value, Label oder Fallback.
+              const label = (opt && opt.label) ? opt.label : (opt && opt.value) ? String(opt.value) : 'Option wählen';
+              const value = (opt && opt.value !== undefined) ? opt.value : (opt && opt.label) ? opt.label : label;
 
               const b=document.createElement('button');
               b.type='button'; b.className='interactive-button';
@@ -326,7 +334,7 @@
             });
           }
           
-          // WIEDERHERGESTELLTE MANUELLE EINGABE-BUTTONS
+          // Manuelle Eingabe-Buttons hinzufügen
           let manualButtonText = null;
 
           if(data.interactionType === 'ORT_SELECTION'){
@@ -339,21 +347,24 @@
               manualButtonText = 'Eigene Erinnerungszeit eingeben';
           }
 
-          if(manualButtonText){
-              const manualInputButton = document.createElement('button');
-              manualInputButton.type = 'button';
-              manualInputButton.className = 'interactive-button manual-input'; 
-              manualInputButton.textContent = manualButtonText;
-              manualInputButton.onclick = () => { 
-                  // Umstellung auf Standard-Eingabefeld
-                  currentInteraction = null;
-                  userInput.focus();
-                  toggleSendButton();
-              };
-              box.appendChild(manualInputButton); 
-          }
-
-          if (box.children.length > 0) {
+          // Nur anzeigen, wenn Optionen vorhanden SIND ODER ein manueller Button definiert ist
+          if(box.children.length > 0 || manualButtonText){
+              if(manualButtonText){
+                  const manualInputButton = document.createElement('button');
+                  manualInputButton.type = 'button';
+                  manualInputButton.className = 'interactive-button manual-input'; 
+                  manualInputButton.textContent = manualButtonText;
+                  manualInputButton.onclick = () => { 
+                      // Umstellung auf Standard-Eingabefeld/Toggle (simuliert)
+                      // Da das Input-Feld bereits immer aktiv ist, reicht es, das aktuelle
+                      // Interaktionsobjekt zu löschen, damit die nächste Antwort als freier Text
+                      // und nicht als Interaktions-Antwort behandelt wird.
+                      currentInteraction = null;
+                      userInput.focus();
+                      toggleSendButton();
+                  };
+                  box.appendChild(manualInputButton); 
+              }
               textEl.appendChild(box); 
           }
           
@@ -388,25 +399,25 @@
     async function sendApiRequest(userMessageText, userImageFile=null){
       const currentDate=new Date().toLocaleDateString('de-DE',{year:'numeric',month:'2-digit',day:'2-digit'});
 
-      // **KORRIGIERTER SYSTEM PROMPT** (Exakt V5.0 mit Fix für [FEHLT]/-)
+      // **KORRIGIERTER SYSTEM PROMPT** (Ausführlich und mit allen Interaktions-Details)
       const systemPrompt=`Sie sind der 'AI Termin-Detektiv'. Das **HEUTIGE DATUM ist: ${currentDate}**. Extrahieren und pflegen Sie Datum (YYYY-MM-DD), Uhrzeit (HH:MM), Dauer (HH:MM), Ort (vollständige Adresse) und Zweck. Behalten Sie den Chatverlauf immer im Kontext. Nutzen Sie Google Search, um Adressen von Ärzten, Geschäften oder Orten zu finden.
 Wenn Daten fehlen oder unklar sind, antworten Sie ausschließlich mit einem <INTERACTION>-Block im JSON-Format.
 
 Spezifische Anweisungen für die interaktive Abfrage:
 1.  **Fehlender Ort (ORT_SELECTION):**
-    * Wenn ein Ort unklar ist (z.B. nur "Bretzenheim"), soll der 'message'-Text lauten: "**Ort**\nDer Termin-Detektiv hat keine eindeutige Adresse erkannt. Geben Sie bitte unten die korrekte Adresse ein oder wählen Sie einen Vorschlag aus:". Fügen Sie 5 präzise Adressvorschläge (aus Google Search, z.B. von "Dr. Weber in Bretzenheim") als 'options' (mit label=Adresse, value=Adresse) hinzu.
-    * Wenn ein Ort erkannt wurde (z.B. "Dr. Weber, Hauptstraße 10"), aber das Feld "Ort" als unvollständig gekennzeichnet ist, soll der 'message'-Text lauten: "**Ort**\nDer Termin-Detektiv hat folgende Adresse erkannt: **[Erkannte Adresse]**. Falls Korrektur notwendig, geben Sie bitte unten die korrekte Adresse ein oder wählen Sie einen Vorschlag aus:". Fügen Sie 5 alternative Adressvorschläge (aus Google Search) als 'options' hinzu.
+    * Wenn ein Ort unklar ist (z.B. nur "Bretzenheim"), soll der 'message'-Text lauten: "**Ort**\\nDer Termin-Detektiv hat keine eindeutige Adresse erkannt. Geben Sie bitte unten die korrekte Adresse ein oder wählen Sie einen Vorschlag aus:". Fügen Sie 5 präzise Adressvorschläge (aus Google Search, z.B. von "Dr. Weber in Bretzenheim") als 'options' (mit label=Adresse, value=Adresse) hinzu.
+    * Wenn ein Ort erkannt wurde (z.B. "Dr. Weber, Hauptstraße 10"), aber das Feld "Ort" als unvollständig gekennzeichnet ist, soll der 'message'-Text lauten: "**Ort**\\nDer Termin-Detektiv hat folgende Adresse erkannt: **[Erkannte Adresse]**. Falls Korrektur notwendig, geben Sie bitte unten die korrekte Adresse ein oder wählen Sie einen Vorschlag aus:". Fügen Sie 5 alternative Adressvorschläge (aus Google Search) als 'options' hinzu.
     * Wenn der Ort eindeutig erkannt wird und die Adresse vollständig ist, darf keine INTERACTION für ORT_SELECTION erfolgen.
 2.  **Fehlende Dauer (DAUER_SELECTION):**
-    * Der 'message'-Text soll lauten: "**Dauer**\nBitte wählen Sie die voraussichtliche Dauer aus:". Fügen Sie 4 Dauer-Buttons hinzu mit festen Labels und Werten:
+    * Der 'message'-Text soll lauten: "**Dauer**\\nBitte wählen Sie die voraussichtliche Dauer aus:". Fügen Sie 4 Dauer-Buttons hinzu mit festen Labels und Werten:
         * Label: "30 Min", Value: "0:30"
         * Label: "1 Stunde", Value: "1:00"
         * Label: "2 Stunden", Value: "2:00"
         * Label: "3 Stunden", Value: "3:00"
 3.  **Fehlender Zweck (ZWECK_SELECTION):**
-    * Der 'message'-Text soll lauten: "**Zweck**\nBitte wählen Sie einen passenden Zweck aus:". Fügen Sie 5 intelligente, kontextbezogene Vorschläge als 'options' hinzu (z.B. bei Arzttermin: "Regelmäßige Kontrolle", "Blutabnahme", "Erstuntersuchung", "Folgetermin", "Impftermin").
+    * Der 'message'-Text soll lauten: "**Zweck**\\nBitte wählen Sie einen passenden Zweck aus:". Fügen Sie 5 intelligente, kontextbezogene Vorschläge als 'options' hinzu (z.B. bei Arzttermin: "Regelmäßige Kontrolle", "Blutabnahme", "Erstuntersuchung", "Folgetermin", "Impftermin").
 4.  **Erinnerung (REMINDER_SELECTION, optional):**
-    * Nachdem alle Hauptfelder (Datum, Uhrzeit, Dauer, Ort, Zweck) vollständig sind, fragen Sie optional: "**Erinnerung**\nWann möchten Sie erinnert werden?". Fügen Sie 4 Vorschläge als 'options' hinzu (z.B. "30 Minuten davor", "1 Stunde davor", "2 Stunden davor", "3 Stunden davor").
+    * Nachdem alle Hauptfelder (Datum, Uhrzeit, Dauer, Ort, Zweck) vollständig sind, fragen Sie optional: "**Erinnerung**\\nWann möchten Sie erinnert werden?". Fügen Sie 4 Vorschläge als 'options' hinzu (z.B. "30 Minuten davor", "1 Stunde davor", "2 Stunden davor", "3 Stunden davor").
 
 Wenn alle Hauptfelder (Datum, Uhrzeit, Dauer, Ort, Zweck) vorliegen, liefern Sie zusätzlich:
 <EXTRACT>
