@@ -1,34 +1,34 @@
-// netlify/functions/gemini.js
 const API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent";
 
-const cors = (status = 200, body = "", extraHeaders = {}) =>
-  new Response(body, {
-    status,
-    headers: {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Headers": "Content-Type",
-      "Access-Control-Allow-Methods": "POST, OPTIONS",
-      "Content-Type": "application/json; charset=utf-8",
-      ...extraHeaders
-    }
-  });
-
 export default async (req) => {
-  // Preflight
+  // CORS + Preflight
   if (req.method === "OPTIONS") {
-    return cors(204, "");
+    return new Response("", {
+      status: 204,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Headers": "Content-Type",
+        "Access-Control-Allow-Methods": "POST, OPTIONS"
+      }
+    });
   }
 
   try {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      return cors(500, JSON.stringify({ error: { message: "GEMINI_API_KEY missing" } }));
+      return new Response(JSON.stringify({ error: { message: "GEMINI_API_KEY missing" } }), {
+        status: 500,
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Content-Type": "application/json; charset=utf-8"
+        }
+      });
     }
 
-    // Body robust einlesen
+    // Payload lesen
     let payload;
-    const ct = req.headers.get("content-type") || "";
-    if (ct.includes("application/json")) {
+    const ctIn = req.headers.get("content-type") || "";
+    if (ctIn.includes("application/json")) {
       payload = await req.json().catch(() => ({}));
     } else {
       const raw = await req.text();
@@ -44,10 +44,25 @@ export default async (req) => {
       body: JSON.stringify(payload)
     });
 
-    const text = await upstream.text();
-    // Antworte mit dem Original-Status und -Body, CORS beibehalten
-    return cors(upstream.status, text);
+    const bodyText = await upstream.text();
+    const isJson = upstream.headers.get("content-type")?.includes("application/json");
+
+    return new Response(bodyText, {
+      status: upstream.status,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Headers": "Content-Type",
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Content-Type": isJson ? "application/json; charset=utf-8" : "text/plain; charset=utf-8"
+      }
+    });
   } catch (e) {
-    return cors(502, JSON.stringify({ error: { message: e.message } }));
+    return new Response(JSON.stringify({ error: { message: e.message } }), {
+      status: 502,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Content-Type": "application/json; charset=utf-8"
+      }
+    });
   }
 };
