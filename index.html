@@ -653,7 +653,7 @@ async function sendApiRequest(userMessageText, userImageFile = null) {
        {"Datum": "YYYY-MM-DD", "Uhrzeit": "HH:MM", "Dauer": "HH:MM", "Ort": "Adresse/Name des Ortes", "Zweck": "Beschreibung"}
        </DATA>
        </EXTRACT>
-       Verwenden Sie **immer '[FEHLT]'** als Wert im JSON in **<DATA>**, wenn Daten fehlen (Datum, Uhrzeit, Dauer oder Ort). Verwenden Sie **NIEMALS '[FEHLT]'** in der Anzeige in **<EXTRACT>** (ersetzen Sie es dort durch '-').
+       Verwenden Sie **immer '-'** als Wert im JSON in **<DATA>**, wenn Daten fehlen (Datum, Uhrzeit, Dauer oder Ort). Verwenden Sie **NIEMALS '[FEHLT]'** in der Anzeige in **<EXTRACT>** (ersetzen Sie es dort durch '-').
     3. **Interaktion & Google Search:** Wenn Uhrzeit, Dauer oder Ort fehlen, **MÜSSEN** Sie den Benutzer **IMMER** danach fragen.
        Wenn die Adresse eines Ortes unklar ist (z.B. nur 'Rewe' oder 'Dr. Müller'), **MÜSSEN** Sie das Google Search Tool verwenden, um **mindestens 5 bis maximal 10 spezifische, vollständige Adressen** in der Nähe (falls ein Ort bekannt ist) oder in Deutschland zu finden. Extrahieren Sie die vollständigen Adressen (inkl. Stadt/PLZ) und bieten Sie diese dem Benutzer in einem \`<INTERACTION>\` Block zur Auswahl an.
        Verwenden Sie hierfür den \`interactionType: 'LOCATION_SELECTION'\`. Die Optionen sollten nur die vollständige Adresse enthalten.
