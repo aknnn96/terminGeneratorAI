@@ -3,9 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>AI Termin-Detektiv Interaktiv (Production)</title>
+  <title>AI Termin-Detektiv Interaktiv V2.0</title>
 
-  <!-- Tailwind CSS + Material Icons -->
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
 
@@ -34,11 +33,13 @@
     .loading-dots div:nth-child(3){ animation-delay:0.4s; }
     @keyframes bounce { from{ transform:translateY(0);} to{ transform:translateY(-5px);} }
 
-    .interactive-buttons { display:flex; flex-direction:column; gap:8px; margin-top:1rem; padding-top:0.5rem; }
+    .interactive-buttons { display:flex; flex-wrap:wrap; gap:8px; margin-top:1rem; padding-top:0.5rem; } /* Flex-wrap für bessere Darstellung */
     .interactive-button {
-      display:flex; align-items:center; justify-content:center; gap:8px; width:100%;
+      display:flex; align-items:center; justify-content:center; gap:8px; 
       background:#10B981; color:#fff; padding:10px 14px; border-radius:0.75rem; font-size:0.9rem; font-weight:600;
       cursor:pointer; transition:background-color .2s, transform .05s; box-shadow:0 1px 3px rgba(0,0,0,0.15);
+      flex-grow:1; /* Erlaubt Buttons, den verfügbaren Platz besser zu nutzen */
+      min-width: calc(33.333% - 8px); /* Mindestbreite für 3 pro Reihe auf Desktops */
     }
     .interactive-button:hover { background:#059669; }
     .interactive-button:active { transform:scale(0.99); }
@@ -98,7 +99,7 @@
           class="flex-grow resize-none p-3 border border-gray-300 rounded-2xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 overflow-hidden"
           style="max-height:200px;"></textarea>
 
-        <button id="sendButton" disabled
+        <button id="sendButton"
           class="flex items-center justify-center gap-2 bg-indigo-500 text-white p-3 rounded-full shadow-lg transition-all duration-300 disabled:bg-indigo-300 disabled:opacity-70 hover:bg-indigo-600">
           <span class="material-icons align-middle" style="font-size:18px; line-height:1;">send</span>
           <span class="hidden sm:inline">Senden</span>
@@ -110,17 +111,15 @@
   <script type="module">
     // Endpoint über Netlify Functions (Proxy)
     const API_ENDPOINT = "/.netlify/functions/gemini";
-    const STORAGE_KEY = 'terminDetektivChatHistory';
 
+    // Chatverlauf wird NICHT im LocalStorage gespeichert
     let chatHistory = [];
     let currentImageFile = null;
     let currentInteraction = null;
 
     let chatWindow, userInput, sendButton, downloadChatButton, fileInput, imagePreviewContainer, loadingIndicator;
 
-    function saveChatHistory(){ try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(chatHistory)); }catch(e){ console.error(e); } }
-    function loadChatHistory(){ try{ const s=localStorage.getItem(STORAGE_KEY); if(s){ chatHistory=JSON.parse(s); renderChatHistory(); } }catch(e){ console.error(e); } }
-
+    // Funktionen zur Speicherung/Laden entfernt
     function renderChatHistory(){
       if(!chatWindow) return;
       chatWindow.innerHTML='';
@@ -165,20 +164,21 @@
     function downloadICS(c){ const blob=new Blob([c],{type:'text/calendar;charset=utf-8'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`termin_${Date.now()}.ics`; document.body.appendChild(a); a.click(); document.body.removeChild(a); }
 
     function scrollToBottom(){ if(!chatWindow) return; setTimeout(()=>{ chatWindow.scrollTop=chatWindow.scrollHeight; },10); }
-// index.html (Neue Version)
-function toggleSendButton(){
-  if(!sendButton||!userInput) return;
-  const isInteracting=currentInteraction!==null;
-  
-  // Der Senden-Button wird IMMER aktiv gesetzt.
-  sendButton.disabled = false; 
+    
+    // Toggle-Logik geändert: Button und Input sind immer aktiv
+    function toggleSendButton(){
+      if(!sendButton||!userInput) return;
+      const isInteracting=currentInteraction!==null;
+      
+      // Button IMMER aktiv setzen
+      sendButton.disabled = false; 
 
-  // Die Textbox (userInput) wird IMMER aktiv gesetzt.
-  userInput.disabled = false; 
+      // Textbox (userInput) IMMER aktiv setzen
+      userInput.disabled = false; 
 
-  // Der Platzhaltertext wird weiterhin angepasst.
-  userInput.placeholder=isInteracting?'Bitte wählen Sie eine Option oder geben Sie die Antwort direkt ein...':'Termin-Details eingeben...';
-}
+      // Platzhaltertext anpassen
+      userInput.placeholder=isInteracting?'Bitte wählen Sie eine Option oder geben Sie die Antwort direkt ein...':'Termin-Details eingeben...';
+    }
 
     function formatMarkdownToHtml(raw){
       let t = raw.replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/\*(.*?)\*/g,'<em>$1</em>');
@@ -244,21 +244,25 @@ function toggleSendButton(){
           textEl.innerHTML = formatMarkdownToHtml(prompt) + '<br>';
 
           const box=document.createElement('div'); box.className='interactive-buttons';
-          if(Array.isArray(data.options)){
+          
+          if(Array.isArray(data.options) && data.options.length > 0){
             data.options.forEach(opt=>{
+              // Robustere Button-Logik, um "undefined" zu verhindern
+              const label = opt && (opt.label || opt.value) ? (opt.label || String(opt.value)) : 'Fehlende Option';
+              const value = opt && (opt.value ?? opt.label) ? (opt.value ?? opt.label) : label;
+
               const b=document.createElement('button');
               b.type='button'; b.className='interactive-button';
-              b.textContent = opt.label || String(opt.value);
-              b.onclick = () => handleInteractiveResponse(opt.value ?? opt.label);
+              b.textContent = label;
+              b.onclick = () => handleInteractiveResponse(value);
               box.appendChild(b);
             });
+            textEl.appendChild(box); // Buttons nur anhängen, wenn vorhanden
           }
-          if(data.allowManualInput){
-            const manual=document.createElement('input'); manual.id='interactiveInput'; manual.type='text'; manual.placeholder=data.inputPlaceholder||'Direkte Eingabe hier...';
-            manual.onkeydown=(e)=>{ if(e.key==='Enter'){ e.preventDefault(); if(manual.value.trim()) handleInteractiveResponse(manual.value.trim()); } };
-            box.appendChild(manual);
-          }
-          textEl.appendChild(box);
+          
+          // Manuelle Eingabe ist jetzt IMMER in der Haupt-Textbox möglich.
+          // Die alte Logik für die interaktive Input-Box wird entfernt.
+          
           raw = raw.replace(iRx,'').trim();
         }catch(e){ console.error('Interaction JSON parse error', e); }
       }
@@ -272,8 +276,8 @@ function toggleSendButton(){
     function addMessageToChat(text, sender, imageUrl=null){
       const data={ text, sender, imageUrl };
       chatHistory.push(data);
+      // saveChatHistory() wurde entfernt
       chatWindow.appendChild(createMessageElement(data));
-      saveChatHistory();
       scrollToBottom();
       return data;
     }
@@ -290,8 +294,15 @@ function toggleSendButton(){
     async function sendApiRequest(userMessageText, userImageFile=null){
       const currentDate=new Date().toLocaleDateString('de-DE',{year:'numeric',month:'2-digit',day:'2-digit'});
 
+      // SYSTEM PROMPT ANPASSUNG für die neue interaktive Logik
       const systemPrompt=`Sie sind der 'AI Termin-Detektiv'. Das **HEUTIGE DATUM ist: ${currentDate}**. Extrahieren Sie Datum (YYYY-MM-DD), Uhrzeit (HH:MM), Dauer (HH:MM), Ort (vollständige Adresse) und Zweck.
-Wenn Daten fehlen, antworten Sie ausschließlich mit einem <INTERACTION>-Block im JSON-Format (z. B. {"interactionType":"DURATION_SELECTION","message":"Bitte wählen ...","options":[...]}).
+Wenn Daten fehlen, antworten Sie ausschließlich mit einem <INTERACTION>-Block im JSON-Format.
+
+Spezifische Anweisungen für die interaktive Abfrage:
+1.  **Fehlender Ort (Ort):** Der 'message'-Text muss lauten: "Bitte wählen Sie den Ort aus, um ihre Daten zu vervollständigen". Fügen Sie 5 präzise Adressvorschläge als 'options' hinzu (z.B. für 'Rewe in Mainz' 5 verschiedene Rewe Adressen).
+2.  **Fehlender Zweck (Zweck):** Der 'message'-Text muss lauten: "Informationen". Fügen Sie 5 intelligente, kontextbezogene Vorschläge als 'options' hinzu (z.B. 'Zahnarzttermin', 'Kundenbesuch', 'Elternabend').
+3.  **Andere fehlende Felder (Datum, Uhrzeit, Dauer):** Senden Sie generische Auswahlschaltflächen mit klaren Beschriftungen. Verwenden Sie den Feldnamen (z.B. 'Datum') im 'message'-Text.
+
 Wenn alle Felder vorliegen, liefern Sie zusätzlich:
 <EXTRACT>
 **Datum:** YYYY-MM-DD
@@ -303,8 +314,9 @@ Wenn alle Felder vorliegen, liefern Sie zusätzlich:
 </EXTRACT>
 Im JSON in <DATA> fehlende Felder als "[FEHLT]" kennzeichnen; in der Anzeige stattdessen "-". Antworten Sie auf Deutsch.`;
 
-      const historyForApi = chatHistory.slice(-8).map(m=>({ role:m.sender==='user'?'user':'model', parts:[{ text:m.text }] }));
 
+      // Chatverlauf wird NICHT mehr gesendet (da er nicht gemerkt werden soll)
+      // let historyForApi = chatHistory.slice(-8).map(m=>({ role:m.sender==='user'?'user':'model', parts:[{ text:m.text }] }));
       let parts=[{ text:userMessageText }];
       if(userImageFile){
         try{
@@ -316,8 +328,9 @@ Im JSON in <DATA> fehlende Felder als "[FEHLT]" kennzeichnen; in der Anzeige sta
         }catch{ return { text:"Ein Fehler ist beim Hochladen des Bildes aufgetreten.", type:'error' }; }
       }
 
-      const payload = { contents:[...historyForApi, { role:'user', parts }], tools:[{ "google_search":{} }], systemInstruction:{ parts:[{ text: systemPrompt }] } };
-
+      // Der History-Teil des Payloads wird leer gelassen, da der Chatverlauf nicht gemerkt werden soll
+      const payload = { contents:[{ role:'user', parts }], tools:[{ "google_search":{} }], systemInstruction:{ parts:[{ text: systemPrompt }] } }; 
+      
       // Sende nur, wenn Text/Bild vorhanden ist
       if (!parts || !Array.isArray(parts) || parts.length === 0 || (!userMessageText && !userImageFile)) {
         return { text: "Bitte geben Sie eine Nachricht ein oder laden Sie ein Bild hoch.", type: "error" };
@@ -346,13 +359,11 @@ Im JSON in <DATA> fehlende Felder als "[FEHLT]" kennzeichnen; in der Anzeige sta
     async function handleChatFlow(userMessageText, userImageFile=null){
       if(!userMessageText && !userImageFile) return;
       showLoading();
-      userInput.disabled = false;
       try{
         const response = await sendApiRequest(userMessageText, userImageFile);
         addMessageToChat(response.text, response.type === 'error' ? 'system' : 'model');
       } finally {
         hideLoading();
-        userInput.disabled = false;
         toggleSendButton();
       }
     }
@@ -363,7 +374,8 @@ Im JSON in <DATA> fehlende Felder als "[FEHLT]" kennzeichnen; in der Anzeige sta
       if(!text && !imageFile) return;
 
       const userImageUrl = imageFile ? URL.createObjectURL(imageFile) : null;
-      sendButton.disabled = false;
+      // sendButton.disabled = true; // Button bleibt aktiv
+
       addMessageToChat(text || "(Bild gesendet)", 'user', userImageUrl);
 
       userInput.value = '';
@@ -383,10 +395,10 @@ Im JSON in <DATA> fehlende Felder als "[FEHLT]" kennzeichnen; in der Anzeige sta
       addMessageToChat(`(Korrigiert/Ergänzt: ${v})`, 'user');
 
       currentInteraction = null;
-      userInput.disabled = false;
-      toggleSendButton();
+      toggleSendButton(); // Stellt Platzhaltertext wieder auf Standard
 
       const msg = `**Interaktive Korrektur:** Feld (${interaction.interactionType}) = **${v}**. Aktualisiere den Termin-Entwurf.`;
+      // Sende nur die letzte Korrektur, um den Verlauf nicht zu merken
       await handleChatFlow(msg);
     }
 
@@ -404,15 +416,14 @@ Im JSON in <DATA> fehlende Felder als "[FEHLT]" kennzeichnen; in der Anzeige sta
       currentInteraction = null;
       currentImageFile = null;
       userInput.value = '';
-      sendButton.disabled = true;
-      userInput.disabled = false;
+      
+      // History wird nicht geladen, Chatverlauf wird direkt initialisiert
+      chatHistory = []; 
 
-      loadChatHistory();
-
-      if(chatHistory.length===0){
-        const welcome = "Willkommen beim **AI Termin-Detektiv**! Das heutige Datum ist der **" + new Date().toLocaleDateString('de-DE') + "**. Senden Sie Text, einen Screenshot oder ein Foto; fehlende Details werden interaktiv abgefragt.";
-        addMessageToChat(welcome, 'model');
-      }
+      // Willkommensnachricht immer anzeigen, da keine History geladen wird
+      const welcome = "Willkommen beim **AI Termin-Detektiv**! Das heutige Datum ist der **" + new Date().toLocaleDateString('de-DE') + "**. Senden Sie Text, einen Screenshot oder ein Foto; fehlende Details werden interaktiv abgefragt.";
+      addMessageToChat(welcome, 'model');
+      
 
       userInput.addEventListener('input', ()=>{
         userInput.style.height='auto';
@@ -422,7 +433,7 @@ Im JSON in <DATA> fehlende Felder als "[FEHLT]" kennzeichnen; in der Anzeige sta
       userInput.addEventListener('keydown', (e)=>{
         if(e.key==='Enter' && !e.shiftKey){
           e.preventDefault();
-          if(!sendButton.disabled){ sendMessage(); }
+          sendMessage(); // Button ist immer aktiv
         }
       });
 
@@ -463,8 +474,3 @@ Im JSON in <DATA> fehlende Felder als "[FEHLT]" kennzeichnen; in der Anzeige sta
   </script>
 </body>
 </html>
-
-
-
-
-
