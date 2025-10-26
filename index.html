@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>AI Termin-Detektiv Interaktiv V19.0 (Stabilitäts-Fix)</title>
+  <title>AI Termin-Detektiv Interaktiv V20.0 (Stabilitäts-Fix)</title>
 
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
@@ -33,6 +33,7 @@
     .loading-dots div:nth-child(3){ animation-delay:0.4s; }
     @keyframes bounce { from{ transform:translateY(0);} to{ transform:translateY(-5px);} }
 
+    /* V20.0: Flexbox für Optionen (kann umbrechen) */
     .interactive-buttons { display:flex; flex-wrap:wrap; gap:8px; margin-top:1rem; padding-top:0.5rem; } 
     .interactive-button {
       display:flex; align-items:center; justify-content:center; gap:8px; 
@@ -49,15 +50,17 @@
         padding-left: 1rem;
         padding-right: 1rem;
     }
+    /* Stil für den manuellen Eingabe-Button */
     .interactive-button.manual-input {
-      background:#F3F4F6; /* Very Light Grey */
-      color: #4B5563; /* Darker Text */
-      border: 1px dashed #9CA3AF; /* Dashed Border */
-      box-shadow: none; /* No shadow */
+      background:#F3F4F6; 
+      color: #4B5563; 
+      border: 1px dashed #9CA3AF; 
+      box-shadow: none; 
       flex-basis: 100%;
+      pointer-events: auto !important; /* Sicherstellen, dass der Klick funktioniert */
     }
     .interactive-button.manual-input:hover { 
-      background:#E5E7EB; /* Slightly darker hover */
+      background:#E5E7EB; 
       color: #1F2937;
     }
     .interactive-button:hover { background:#059669; }
@@ -186,6 +189,7 @@
     }
 
     // --- Kalender Hilfsfunktionen ---
+    // V20.0: Auf Bindestrich prüfen, da [FEHLT] durch das Prompt in der EXTRACTION zu "-" wird
     function durationToMinutes(d){ if(!d || d.includes('-') || d.includes('[FEHLT]')) return 60; const p=d.split(':'); return p.length===2 ? (+p[0])*60+(+p[1]) : 60; }
     function calculateEndTime(date,time,dur){
       if(!time || time.includes('-') || time.includes('[FEHLT]')) return date.replace(/-/g,'')+'T235959';
@@ -227,6 +231,9 @@
       const text=userInput.value.trim(); const hasImage=currentImageFile!==null; const hasInput=Boolean(text)||hasImage; 
       
       sendButton.disabled=!hasInput; 
+      // V20.0: Input ist nur dann disabled, wenn eine Interaktion aktiv ist UND kein Bild gesendet wurde. Aber für manuelle Eingabe muss es offen sein.
+      // Da wir jetzt einen "Andereingabe"-Button haben, lassen wir das Inputfeld nur dann zu, wenn der Button geklickt wird oder keine Interaktion vorliegt.
+      // Für diesen Fall lassen wir das Textfeld immer offen, aber ändern den Platzhalter.
       userInput.disabled=false; 
       
       userInput.placeholder=currentInteraction?'Bitte geben Sie hier Ihre Korrektur/Antwort ein oder wählen Sie oben eine Option...':'Termin-Details eingeben...';
@@ -257,8 +264,7 @@
         
         const block=document.createElement('div'); block.className='extraction-block';
         
-        // KORREKTUR V19.0: Ersetzt intern genutztes [FEHLT] durch den gewünschten Bindestrich (-) für die UI-Anzeige 
-        // und verlässt sich darauf, dass das Modell in der formatierten Textausgabe bereits "-" verwendet.
+        // V20.0: Ersetzt [FEHLT] durch - für die Anzeige (Bindestrich-Fix)
         const content=extraction.replace(/\[FEHLT\]/g,'-').replace(/<br>/g,'\n').split('\n').filter(l=>l.trim().length>0).map(l=>`<div>${l}</div>`).join('');
         block.innerHTML=`<strong>Termin-Details:</strong><br>`+content;
 
@@ -328,13 +334,13 @@
               const b=document.createElement('button');
               b.type='button'; b.className='interactive-button';
               b.textContent = label;
-              // BESTÄTIGTER FIX: Handler ist korrekt.
+              // V20.0: Handler auf Robustheit geprüft
               b.onclick = () => handleInteractiveResponse(value); 
               box.appendChild(b);
             });
           }
           
-          // Manuelle Eingabe-Buttons hinzufügen (Immer am Ende)
+          // V20.0: Manuelle Eingabe-Buttons hinzufügen (Immer am Ende)
           let manualButtonText = null;
 
           if(data.interactionType === 'ORT_SELECTION'){
@@ -350,11 +356,15 @@
           if(manualButtonText){
               const manualInputButton = document.createElement('button');
               manualInputButton.type = 'button';
+              // V20.0: Die neue, allgemeine Textstruktur wird hier verwendet, aber für den Kontext spezifisch angepasst
               manualInputButton.className = 'interactive-button manual-input'; 
               manualInputButton.textContent = manualButtonText;
               manualInputButton.onclick = () => { 
-                  currentInteraction = null;
+                  // V20.0: currentInteraction bleibt aktiv, aber der Fokus wird aufs Textfeld gelenkt
                   userInput.focus();
+                  userInput.placeholder = "Geben Sie hier Ihre manuelle Eingabe ein und drücken Sie 'Senden'.";
+                  // currentInteraction muss null sein, damit die normale Sende-Logik das Feld als manuelle Eingabe sendet
+                  currentInteraction = null;
                   toggleSendButton();
               };
               box.appendChild(manualInputButton); 
@@ -368,7 +378,7 @@
         }catch(e){ console.error('Interaction JSON parse error', e); }
       }
 
-      // FIX V18.0: Aggressiv alle verbleibenden JSON-Strukturen (wie das {..} unter dem Zweck) entfernen
+      // Aggressiv alle verbleibenden JSON-Strukturen entfernen
       if(msg.sender==='model'){
           raw = raw.replace(/\{[\s\S]*\}/g, '').trim(); 
       }
@@ -407,7 +417,7 @@ Wenn Daten fehlen oder unklar sind, antworten Sie ausschließlich mit einem <INT
 Spezifische Anweisungen für die interaktive Abfrage:
 1.  **Fehlender Ort (ORT_SELECTION):**
     * Wenn ein Ort unklar ist (z.B. nur "Bretzenheim"), soll der 'message'-Text lauten: "**Ort**\\nDer Termin-Detektiv hat keine eindeutige Adresse erkannt. Geben Sie bitte unten die korrekte Adresse ein oder wählen Sie einen Vorschlag aus:". Fügen Sie 5 präzise Adressvorschläge (aus Google Search, z.B. von "Dr. Weber in Bretzenheim") als 'options' (mit label=Adresse, value=Adresse) hinzu.
-    * Wenn ein Ort erkannt wurde (z.B. "Dr. Weber, Hauptstraße 10"), aber das Feld "Ort" als unvollständig gekennzeichnet ist, soll der 'message'-Text lauten: "**Ort**\\nDer Termin-Detektiv hat folgende Adresse erkannt: **[Erkannte Adresse]**. Falls Korrektur notwendig, geben Sie bitte unten die korrekte Adresse ein oder wählen Sie einen Vorschlag aus:". Fügen Sie 5 alternative Adressvorschläge (aus Google Search) als 'options' hinzu.
+    * Wenn ein Ort erkannt wurde (z.B. "Dr. Weber, Hauptstraße 10"), aber das Feld "Ort" als unvollständig gekennzeichnet ist, soll der 'message'-text lauten: "**Ort**\\nDer Termin-Detektiv hat folgende Adresse erkannt: **[Erkannte Adresse]**. Falls Korrektur notwendig, geben Sie bitte unten die korrekte Adresse ein oder wählen Sie einen Vorschlag aus:". Fügen Sie 5 alternative Adressvorschläge (aus Google Search) als 'options' hinzu.
     * Wenn der Ort eindeutig erkannt wird und die Adresse vollständig ist, darf keine INTERACTION für ORT_SELECTION erfolgen.
 2.  **Fehlende Dauer (DAUER_SELECTION):**
     * Der 'message'-Text soll lauten: "**Dauer**\\nBitte wählen Sie die voraussichtliche Dauer aus:". Fügen Sie 4 Dauer-Buttons hinzu mit festen Labels und Werten:
@@ -500,32 +510,32 @@ Wenn alle Hauptfelder (Datum, Uhrzeit, Dauer, Ort, Zweck) vorliegen, liefern Sie
       toggleSendButton();
 
       // Bei aktiver Interaktion wird der Text als Interaktions-Antwort gesendet
-      const messageToSend = currentInteraction && !imageFile ? `**Interaktive Korrektur/Ergänzung:** Feld (${currentInteraction.interactionType}) = **${text}**. Aktualisiere den Termin-Entwurf.` : text;
+      // Da der "Andereingabe"-Button currentInteraction auf null setzt, wird bei Send immer der normale Text gesendet. 
+      // Das ist korrekt für manuelle Eingaben.
+      const messageToSend = text;
       
-      currentInteraction = null;
+      // currentInteraction = null; // Wird beim Rendern des neuen Bot-Messsage-Elements auf null gesetzt.
 
       await handleChatFlow(messageToSend, imageFile);
     }
 
     async function handleInteractiveResponse(value){
       if(!currentInteraction) return;
-      // V19.0: Sicherstellen, dass der Wert als String verarbeitet wird
+      // V20.0: Sicherstellen, dass der Wert als String verarbeitet wird
       const v = String(value||"").trim(); 
       if(!v) return;
 
       const interaction = currentInteraction;
-      // Hier die Nullification entfernen, um Race Conditions zu vermeiden, falls es direkt zum Problem führt.
-      // currentInteraction = null; 
-      // Der Chat-Fluss wird im nächsten Schritt neu gerendert, was currentInteraction auf null setzt.
-
+      
       addMessageToChat(`(Korrigiert/Ergänzt: ${v})`, 'user');
 
-      // currentInteraction wird durch den nächsten Model-Response-Render in createMessageElement auf null gesetzt.
-
+      // Wichtig: currentInteraction muss hier noch den Wert haben, um den msg-String korrekt zu generieren.
       const msg = `**Interaktive Korrektur/Ergänzung:** Feld (${interaction.interactionType}) = **${v}**. Aktualisiere den Termin-Entwurf.`;
+      
+      // currentInteraction wird im Bot-Response-Render auf null gesetzt.
       await handleChatFlow(msg);
       
-      // Aus Sicherheitsgründen wird currentInteraction hier direkt auf null gesetzt, um weitere Klicks auf alte Buttons zu unterbinden
+      // Zusätzliche Absicherung
       currentInteraction = null;
       toggleSendButton();
     }
@@ -535,7 +545,7 @@ Wenn alle Hauptfelder (Datum, Uhrzeit, Dauer, Ort, Zweck) vorliegen, liefern Sie
       userInput = document.getElementById('userInput');
       sendButton = document.getElementById('sendButton');
       downloadChatButton = document.getElementById('downloadChatButton');
-      clearChatButton = document.getElementById('clearChatButton'); 
+      clearChatButton = document.getElementById('clearChatButton'); // V20.0: Initialisiert
       fileInput = document.getElementById('fileInput');
       imagePreviewContainer = document.getElementById('imagePreviewContainer');
       loadingIndicator = document.getElementById('loadingIndicator');
