@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>AI Termin-Detektiv Interaktiv V16.0 (Button Fix)</title>
+  <title>AI Termin-Detektiv Interaktiv V17.0 (Robustheits-Fix)</title>
 
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
@@ -33,20 +33,15 @@
     .loading-dots div:nth-child(3){ animation-delay:0.4s; }
     @keyframes bounce { from{ transform:translateY(0);} to{ transform:translateY(-5px);} }
 
-    /* Fix: Flexible Button-Anordnung für kleine Optionen (Dauer, Erinnerung) */
     .interactive-buttons { display:flex; flex-wrap:wrap; gap:8px; margin-top:1rem; padding-top:0.5rem; } 
-
-    /* Standard Button-Layout (für 3er-Anordnung bei Dauer) */
     .interactive-button {
       display:flex; align-items:center; justify-content:center; gap:8px; 
       background:#10B981; color:#fff; padding:10px 14px; border-radius:0.75rem; font-size:0.9rem; font-weight:600;
       cursor:pointer; transition:background-color .2s, transform .05s; box-shadow:0 1px 3px rgba(0,0,0,0.15);
       flex-basis: calc(33.333% - 8px); 
       min-width: 120px;
-      text-align: center; /* Bei kurzen Labels */
+      text-align: center;
     }
-    
-    /* Layout-Override: Volle Breite für Adress-Optionen */
     .interactive-buttons.full-width-options .interactive-button {
         flex-basis: 100%;
         text-align: left;
@@ -54,15 +49,12 @@
         padding-left: 1rem;
         padding-right: 1rem;
     }
-
     .interactive-button.manual-input {
       background:#6B7280; 
-      flex-basis: 100%; /* Manueller Button volle Breite */
+      flex-basis: 100%;
     }
-
     .interactive-button:hover { background:#059669; }
     .interactive-button:active { transform:scale(0.99); }
-
 
     .calendar-actions { display:flex; flex-direction:column; gap:8px; margin-top:1rem; padding-top:1rem; border-top:1px dashed #D1D5DB; }
     .calendar-button { display:flex; align-items:center; justify-content:center; gap:8px; padding:12px; border-radius:0.75rem; font-weight:600; transition:background-color .2s, transform .05s; width:100%; }
@@ -315,14 +307,14 @@
           const box=document.createElement('div'); 
           box.className='interactive-buttons';
 
-          // Setze spezielle CSS-Klasse für Adress-Optionen
+          // Setze spezielle CSS-Klasse für Adress-Optionen (volle Breite)
           if(data.interactionType === 'ORT_SELECTION' || data.interactionType === 'ZWECK_SELECTION'){
               box.classList.add('full-width-options');
           }
           
           if(Array.isArray(data.options)){
             data.options.forEach(opt=>{
-              // **WICHTIGER FIX:** Prüft auf Existenz, nutzt Value, Label oder Fallback.
+              // **ROBUSTHEITS-FIX:** Prüft auf Existenz, nutzt Value, Label oder Fallback.
               const label = (opt && opt.label) ? opt.label : (opt && opt.value) ? String(opt.value) : 'Option wählen';
               const value = (opt && opt.value !== undefined) ? opt.value : (opt && opt.label) ? opt.label : label;
 
@@ -334,11 +326,11 @@
             });
           }
           
-          // Manuelle Eingabe-Buttons hinzufügen
+          // Manuelle Eingabe-Buttons hinzufügen (Immer am Ende)
           let manualButtonText = null;
 
           if(data.interactionType === 'ORT_SELECTION'){
-              manualButtonText = 'Anderen Ort eingeben';
+              manualButtonText = 'Anderen Ort/Adresse eingeben';
           } else if (data.interactionType === 'DAUER_SELECTION'){
               manualButtonText = 'Andere Dauer eingeben (z.B. 1:45)';
           } else if (data.interactionType === 'ZWECK_SELECTION'){
@@ -347,24 +339,20 @@
               manualButtonText = 'Eigene Erinnerungszeit eingeben';
           }
 
-          // Nur anzeigen, wenn Optionen vorhanden SIND ODER ein manueller Button definiert ist
-          if(box.children.length > 0 || manualButtonText){
-              if(manualButtonText){
-                  const manualInputButton = document.createElement('button');
-                  manualInputButton.type = 'button';
-                  manualInputButton.className = 'interactive-button manual-input'; 
-                  manualInputButton.textContent = manualButtonText;
-                  manualInputButton.onclick = () => { 
-                      // Umstellung auf Standard-Eingabefeld/Toggle (simuliert)
-                      // Da das Input-Feld bereits immer aktiv ist, reicht es, das aktuelle
-                      // Interaktionsobjekt zu löschen, damit die nächste Antwort als freier Text
-                      // und nicht als Interaktions-Antwort behandelt wird.
-                      currentInteraction = null;
-                      userInput.focus();
-                      toggleSendButton();
-                  };
-                  box.appendChild(manualInputButton); 
-              }
+          if(manualButtonText){
+              const manualInputButton = document.createElement('button');
+              manualInputButton.type = 'button';
+              manualInputButton.className = 'interactive-button manual-input'; 
+              manualInputButton.textContent = manualButtonText;
+              manualInputButton.onclick = () => { 
+                  currentInteraction = null;
+                  userInput.focus();
+                  toggleSendButton();
+              };
+              box.appendChild(manualInputButton); 
+          }
+          
+          if(box.children.length > 0){ // Zeige den Button-Container nur an, wenn Optionen oder ein Manual-Button existieren
               textEl.appendChild(box); 
           }
           
@@ -498,6 +486,7 @@ Wenn alle Hauptfelder (Datum, Uhrzeit, Dauer, Ort, Zweck) vorliegen, liefern Sie
       resetImageUpload();
       toggleSendButton();
 
+      // Bei aktiver Interaktion wird der Text als Interaktions-Antwort gesendet
       const messageToSend = currentInteraction && !imageFile ? `**Interaktive Korrektur/Ergänzung:** Feld (${currentInteraction.interactionType}) = **${text}**. Aktualisiere den Termin-Entwurf.` : text;
       
       currentInteraction = null;
