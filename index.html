@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>AI Termin-Detektiv Interaktiv V18.0 (Final Fix)</title>
+  <title>AI Termin-Detektiv Interaktiv V19.0 (Stabilitäts-Fix)</title>
 
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
@@ -49,7 +49,6 @@
         padding-left: 1rem;
         padding-right: 1rem;
     }
-    /* FIX V18.0: Visual für manuellen Input als grauer Hint */
     .interactive-button.manual-input {
       background:#F3F4F6; /* Very Light Grey */
       color: #4B5563; /* Darker Text */
@@ -258,7 +257,8 @@
         
         const block=document.createElement('div'); block.className='extraction-block';
         
-        // **WICHTIG:** Ersetzt [FEHLT] durch - für die Anzeige
+        // KORREKTUR V19.0: Ersetzt intern genutztes [FEHLT] durch den gewünschten Bindestrich (-) für die UI-Anzeige 
+        // und verlässt sich darauf, dass das Modell in der formatierten Textausgabe bereits "-" verwendet.
         const content=extraction.replace(/\[FEHLT\]/g,'-').replace(/<br>/g,'\n').split('\n').filter(l=>l.trim().length>0).map(l=>`<div>${l}</div>`).join('');
         block.innerHTML=`<strong>Termin-Details:</strong><br>`+content;
 
@@ -328,7 +328,7 @@
               const b=document.createElement('button');
               b.type='button'; b.className='interactive-button';
               b.textContent = label;
-              // FIX V18.0: Click-Handler ist hier, stellt sicher, dass Value gesendet wird.
+              // BESTÄTIGTER FIX: Handler ist korrekt.
               b.onclick = () => handleInteractiveResponse(value); 
               box.appendChild(b);
             });
@@ -350,7 +350,6 @@
           if(manualButtonText){
               const manualInputButton = document.createElement('button');
               manualInputButton.type = 'button';
-              // FIX V18.0: Neue CSS-Klasse für das Aussehen als Hinweis
               manualInputButton.className = 'interactive-button manual-input'; 
               manualInputButton.textContent = manualButtonText;
               manualInputButton.onclick = () => { 
@@ -401,7 +400,7 @@
     async function sendApiRequest(userMessageText, userImageFile=null){
       const currentDate=new Date().toLocaleDateString('de-DE',{year:'numeric',month:'2-digit',day:'2-digit'});
 
-      // SYSTEM PROMPT
+      // SYSTEM PROMPT - ANGEPASST AUF KORREKTE '-' ANZEIGE
       const systemPrompt=`Sie sind der 'AI Termin-Detektiv'. Das **HEUTIGE DATUM ist: ${currentDate}**. Extrahieren und pflegen Sie Datum (YYYY-MM-DD), Uhrzeit (HH:MM), Dauer (HH:MM), Ort (vollständige Adresse) und Zweck. Behalten Sie den Chatverlauf immer im Kontext. Nutzen Sie Google Search, um Adressen von Ärzten, Geschäften oder Orten zu finden.
 Wenn Daten fehlen oder unklar sind, antworten Sie ausschließlich mit einem <INTERACTION>-Block im JSON-Format.
 
@@ -430,7 +429,7 @@ Wenn alle Hauptfelder (Datum, Uhrzeit, Dauer, Ort, Zweck) vorliegen, liefern Sie
 **Zweck:** Text (formatierter Text)
 <DATA>{"Datum":"YYYY-MM-DD","Uhrzeit":"HH:MM","Dauer":"HH:MM","Ort":"Adresse","Zweck":"Text"}</DATA>
 </EXTRACT>
-**WICHTIG:** Im JSON in <DATA> fehlende Felder als **"[FEHLT]"** kennzeichnen. **In der formatierten Textausgabe** innerhalb von <EXTRACT> fehlende Felder mit **einem einfachen Bindestrich** ("-") kennzeichnen. Antworten Sie auf Deutsch. Verwenden Sie im Format-Block descriptive/friendly text (z.B. "Dienstag, der 28.10.2025 (Nächsten Dienstag)") und nicht nur die rohen ISO-Werte.`;
+**WICHTIG:** Im JSON in <DATA> fehlende Felder als **"[FEHLT]"** kennzeichnen. **In der formatierten Textausgabe** innerhalb von <EXTRACT> fehlende Felder **MÜSSEN AUSSCHLIESSLICH** mit **einem einfachen Bindestrich** ("-") gekennzeichnet werden. Antworten Sie auf Deutsch. Verwenden Sie im Format-Block descriptive/friendly text (z.B. "Dienstag, der 28.10.2025 (Nächsten Dienstag)") und nicht nur die rohen ISO-Werte.`;
 
 
       const historyForApi = chatHistory.map(m=>({ role:m.sender==='user'?'user':'model', parts:[{ text:m.text }] }));
@@ -510,18 +509,25 @@ Wenn alle Hauptfelder (Datum, Uhrzeit, Dauer, Ort, Zweck) vorliegen, liefern Sie
 
     async function handleInteractiveResponse(value){
       if(!currentInteraction) return;
-      // FIX V18.0: Sicherstellen, dass der Wert als String verarbeitet wird
+      // V19.0: Sicherstellen, dass der Wert als String verarbeitet wird
       const v = String(value||"").trim(); 
       if(!v) return;
 
       const interaction = currentInteraction;
+      // Hier die Nullification entfernen, um Race Conditions zu vermeiden, falls es direkt zum Problem führt.
+      // currentInteraction = null; 
+      // Der Chat-Fluss wird im nächsten Schritt neu gerendert, was currentInteraction auf null setzt.
+
       addMessageToChat(`(Korrigiert/Ergänzt: ${v})`, 'user');
 
-      currentInteraction = null;
-      toggleSendButton();
+      // currentInteraction wird durch den nächsten Model-Response-Render in createMessageElement auf null gesetzt.
 
       const msg = `**Interaktive Korrektur/Ergänzung:** Feld (${interaction.interactionType}) = **${v}**. Aktualisiere den Termin-Entwurf.`;
       await handleChatFlow(msg);
+      
+      // Aus Sicherheitsgründen wird currentInteraction hier direkt auf null gesetzt, um weitere Klicks auf alte Buttons zu unterbinden
+      currentInteraction = null;
+      toggleSendButton();
     }
 
     function initializeChat(){
